@@ -1,0 +1,21 @@
+services:
+  camera-capture:
+    build:
+      context: .
+    image: camera-capture-app:dev
+    devices:
+      - "${CAMERA_DEVICE:-/dev/video0}:${CAMERA_DEVICE:-/dev/video0}"
+    volumes:
+      - ./captures:/workspace/captures
+    command:
+      - capture-main
+      - --camera-output-dir
+      - /workspace/captures/images
+      - --duration
+      - "${CAPTURE_DURATION:-5}"
+
+  tests:
+    build:
+      context: .
+    image: camera-capture-app:dev
+    command: pytest -m "not hardware"

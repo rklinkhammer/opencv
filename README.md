@@ -37,6 +37,52 @@ source .venv/bin/activate
 pip install -e '.[dev]'
 ```
 
+### Ubuntu Docker Container
+
+The included `Dockerfile` builds an Ubuntu 24.04 development image with Python,
+OpenCV runtime libraries, GStreamer, Video4Linux tools, and libgpiod.
+
+Build the image and run the non-hardware tests:
+
+```bash
+docker compose build
+docker compose run --rm tests
+```
+
+On a Linux host, pass `/dev/video0` through to the container and capture images:
+
+```bash
+docker compose run --rm camera-capture
+```
+
+Images are written to `./captures/images` on the host. To select another camera
+or duration:
+
+```bash
+CAMERA_DEVICE=/dev/video1 CAPTURE_DURATION=10 docker compose run --rm camera-capture
+```
+
+For GPIO capture, pass the GPIO chip as an additional device and provide the
+normal application arguments:
+
+```bash
+docker compose run --rm --device /dev/gpiochip0 camera-capture \
+  capture-main \
+  --camera-output-dir /workspace/captures/images \
+  --gpio-output-dir /workspace/captures/gpio \
+  --duration 5 \
+  --gpio gpiochip0:17:door:both
+```
+
+In Visual Studio, open the repository folder, build the `Dockerfile`, and use
+`compose.yaml` as the Compose project. From its integrated terminal, the same
+`docker compose` commands above work without IDE-specific configuration.
+
+> **USB note:** `/dev/video*` device passthrough is native on Linux. Docker Desktop
+> on Windows or macOS runs containers in a VM and usually does not expose a host
+> USB camera this way. Tests and development still work there, but live capture
+> needs the camera attached to a Linux Docker host (or forwarded into WSL 2/its VM).
+
 ## Usage
 
 The package installs three entry points:
