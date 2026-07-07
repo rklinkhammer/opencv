@@ -1,0 +1,273 @@
+"""Unit tests for camera CLI command flows and output rendering.
+
+These tests validate argument wiring, probe/benchmark paths, and non-zero exit
+behavior when runtime operations fail.
+"""
+
+import unittest
+from unittest.mock import patch
+from io import StringIO
+from contextlib import redirect_stdout
+
+from camera_capture.cli import main
+from camera_capture.models import CaptureConfig
+
+
+class CliTests(unittest.TestCase):
+    @patch("camera_capture.cli.capture_images")
+    def test_main_success(self, mock_capture_images):
+        mock_capture_images.return_value = ["one", "two"]
+
+        exit_code = main(
+            [
+                "--output-dir",
+                "./captures",
+                "--duration",
+                "5",
+                "--camera-index",
+                "0",
+                "--capture-backend",
+                "gstreamer",
+                "--gstreamer-source",
+                "jetson-csi",
+                "--gstreamer-pipeline",
+                "v4l2src device=/dev/video0 ! videoconvert ! appsink",
+                "--fps",
+                "2",
+                "--width",
+                "640",
+                "--height",
+                "480",
+                "--fourcc",
+                "MJPG",
+                "--auto-exposure",
+                "3",
+                "--exposure",
+                "-6",
+                "--gain",
+                "8",
+                "--brightness",
+                "42",
+                "--warmup-frames",
+                "8",
+                "--overlay-timestamp",
+                "--overlay-text",
+                "Lab Camera",
+                "--no-timestamp-in-filename",
+                "--write-exif-timestamp",
+                "--image-type",
+                "png",
+                "--write-queue-size",
+                "256",
+                "--log-file",
+                "./captures/capture.log",
+            ]
+        )
+
+        self.assertEqual(0, exit_code)
+        mock_capture_images.assert_called_once()
+        config = mock_capture_images.call_args[0][0]
+        self.assertIsInstance(config, CaptureConfig)
+        self.assertEqual("gstreamer", config.capture_backend)
+        self.assertEqual("jetson-csi", config.gstreamer_source)
+        self.assertEqual(
+            "v4l2src device=/dev/video0 ! videoconvert ! appsink", config.gstreamer_pipeline
+        )
+        self.assertEqual(2.0, config.fps)
+        self.assertEqual(640, config.frame_width)
+        self.assertEqual(480, config.frame_height)
+        self.assertEqual("MJPG", config.fourcc)
+        self.assertEqual(3.0, config.auto_exposure)
+        self.assertEqual(-6.0, config.exposure)
+        self.assertEqual(8.0, config.gain)
+        self.assertEqual(42.0, config.brightness)
+        self.assertEqual(8, config.warmup_frames)
+        self.assertTrue(config.overlay_timestamp)
+        self.assertEqual("Lab Camera", config.overlay_text)
+        self.assertFalse(config.timestamp_in_filename)
+        self.assertTrue(config.write_exif_timestamp)
+        self.assertEqual("png", config.image_extension)
+        self.assertEqual(256, config.write_queue_size)
+        self.assertEqual("capture.log", config.log_file.name)
+
+    @patch("camera_capture.cli.capture_images")
+    def test_main_failure(self, mock_capture_images):
+        mock_capture_images.side_effect = RuntimeError("camera unavailable")
+
+        exit_code = main(
+            [
+                "--output-dir",
+                "./captures",
+            ]
+        )
+
+        self.assertEqual(1, exit_code)
+
+    @patch("camera_capture.cli.capture_images")
+    @patch("camera_capture.cli.probe_camera_modes")
+    def test_main_probe_mode(self, mock_probe_camera_modes, mock_capture_images):
+        mock_probe_camera_modes.return_value = ([], None)
+
+        exit_code = main(
+            [
+                "--output-dir",
+                "./captures",
+                "--probe-modes",
+                "--probe-duration",
+                "1",
+                "--camera-index",
+                "0",
+            ]
+        )
+
+        self.assertEqual(0, exit_code)
+        mock_probe_camera_modes.assert_called_once_with(camera_index=0, duration_seconds=1.0)
+        mock_capture_images.assert_not_called()
+
+    @patch("camera_capture.cli.capture_images")
+    def test_main_benchmark_mode(self, mock_capture_images):
+        mock_capture_images.side_effect = [["a"], ["b", "c"]]
+
+        exit_code = main(
+            [
+                "--output-dir",
+                "./captures",
+                "--benchmark-backends",
+                "--benchmark-duration",
+                "1",
+                "--camera-index",
+                "0",
+                "--fps",
+                "30",
+            ]
+        )
+
+        self.assertEqual(0, exit_code)
+        self.assertEqual(2, mock_capture_images.call_count)
+        first_config = mock_capture_images.call_args_list[0][0][0]
+        second_config = mock_capture_images.call_args_list[1][0][0]
+        self.assertEqual("opencv", first_config.capture_backend)
+        self.assertEqual("gstreamer", second_config.capture_backend)
+
+    @patch("camera_capture.cli.capture_images")
+    def test_main_benchmark_mode_returns_failure_if_any_backend_fails(self, mock_capture_images):
+        mock_capture_images.side_effect = [["a"], RuntimeError("backend failed")]
+
+        exit_code = main(
+            [
+                "--output-dir",
+                "./captures",
+                "--benchmark-backends",
+                "--benchmark-duration",
+                "1",
+                "--camera-index",
+                "0",
+                "--fps",
+                "30",
+            ]
+        )
+
+        self.assertEqual(1, exit_code)
+
+    @patch("camera_capture.cli.capture_images")
+    def test_main_benchmark_mode_failure_output_includes_exception_type(self, mock_capture_images):
+        mock_capture_images.side_effect = [["a"], RuntimeError("backend failed")]
+
+        out = StringIO()
+        with redirect_stdout(out):
+            exit_code = main(
+                [
+                    "--output-dir",
+                    "./captures",
+                    "--benchmark-backends",
+                    "--benchmark-duration",
+                    "1",
+                    "--camera-index",
+                    "0",
+                    "--fps",
+                    "30",
+                ]
+            )
+
+        self.assertEqual(1, exit_code)
+        self.assertIn("FAIL: RuntimeError: backend failed", out.getvalue())
+
+    @patch("camera_capture.cli.capture_images")
+    @patch("camera_capture.cli.benchmark_capture_only")
+    def test_main_benchmark_capture_only_mode(
+        self, mock_benchmark_capture_only, mock_capture_images
+    ):
+        mock_benchmark_capture_only.side_effect = [(10, 1.0, 10.0), (12, 1.0, 12.0)]
+
+        exit_code = main(
+            [
+                "--output-dir",
+                "./captures",
+                "--benchmark-backends",
+                "--benchmark-capture-only",
+                "--benchmark-duration",
+                "1",
+                "--camera-index",
+                "0",
+                "--fps",
+                "30",
+            ]
+        )
+
+        self.assertEqual(0, exit_code)
+        self.assertEqual(2, mock_benchmark_capture_only.call_count)
+        mock_capture_images.assert_not_called()
+
+    @patch("camera_capture.cli.capture_images")
+    @patch("camera_capture.cli.benchmark_capture_only")
+    def test_main_jetson_csi_benchmark_mode(self, mock_benchmark_capture_only, mock_capture_images):
+        mock_benchmark_capture_only.side_effect = [
+            (5, 1.0, 5.0),
+            (10, 1.0, 10.0),
+            (20, 1.0, 20.0),
+            (30, 1.0, 30.0),
+        ]
+
+        exit_code = main(
+            [
+                "--output-dir",
+                "./captures",
+                "--benchmark-jetson-csi",
+                "--benchmark-capture-only",
+                "--benchmark-duration",
+                "1",
+                "--camera-index",
+                "0",
+                "--fps",
+                "30",
+            ]
+        )
+
+        self.assertEqual(0, exit_code)
+        self.assertEqual(4, mock_benchmark_capture_only.call_count)
+
+        benchmarked_resolutions = [
+            (call_args[0][0].frame_width, call_args[0][0].frame_height)
+            for call_args in mock_benchmark_capture_only.call_args_list
+        ]
+        self.assertEqual(
+            [(320, 240), (640, 480), (1280, 720), (1920, 1080)],
+            benchmarked_resolutions,
+        )
+        mock_capture_images.assert_not_called()
+
+    def test_main_rejects_incompatible_benchmark_flags(self):
+        exit_code = main(
+            [
+                "--output-dir",
+                "./captures",
+                "--benchmark-backends",
+                "--benchmark-jetson-csi",
+            ]
+        )
+
+        self.assertEqual(1, exit_code)
+
+
+if __name__ == "__main__":
+    unittest.main()
