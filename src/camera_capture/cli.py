@@ -6,15 +6,54 @@ import argparse
 from pathlib import Path
 import time
 
-from capture_shared.capture_cli import add_common_camera_args
-from capture_shared.capture_cli import build_capture_config
+from capture_shared.cli_options import add_common_camera_args
+from capture_shared.cli_options import build_capture_config
 
 from .benchmarks import benchmark_capture_only
 from .capture import capture_images
+from .models import ProbeResult
 from .probe import probe_camera_modes
-from .reporting import format_exception
-from .reporting import print_backend_benchmark_results
-from .reporting import print_probe_results
+
+
+def format_exception(exc: Exception) -> str:
+    return f"{type(exc).__name__}: {exc}"
+
+
+def print_probe_results(results: list[ProbeResult], best: ProbeResult | None) -> None:
+    if not results:
+        print("No probe results were produced.")
+        return
+
+    print("Mode probe results:")
+    for result in results:
+        print(
+            f"- {result.fourcc} {result.width}x{result.height} "
+            f"req_fps={result.requested_fps:.1f} measured_fps={result.measured_fps:.2f} "
+            f"frames={result.measured_frames} reported_fps={result.reported_fps:.2f}"
+        )
+
+    if best is not None:
+        print(
+            "Best mode: "
+            f"{best.fourcc} {best.width}x{best.height} measured_fps={best.measured_fps:.2f}"
+        )
+
+
+def print_backend_benchmark_results(
+    *,
+    mode_name: str,
+    results: list[tuple[str, int, float, float, str]],
+) -> bool:
+    print(f"Backend benchmark results ({mode_name}):")
+    failed = False
+    for backend, frames, elapsed, saved_fps, status in results:
+        if status.startswith("FAIL:"):
+            failed = True
+        print(
+            f"- {backend}: frames_saved={frames} elapsed_s={elapsed:.2f} "
+            f"saved_fps={saved_fps:.2f} status={status}"
+        )
+    return failed
 
 
 def build_parser() -> argparse.ArgumentParser:

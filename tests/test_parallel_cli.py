@@ -11,12 +11,12 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from capture_shared.parallel_cli import main
+from parallel_cli import main
 from capture_shared.parallel_service import ParallelOutcome, WorkerOutcome
 
 
 class ParallelCliTests(unittest.TestCase):
-    @patch("capture_shared.parallel_cli.execute_parallel_capture")
+    @patch("parallel_cli.execute_parallel_capture")
     def test_main_fails_when_gpio_worker_does_not_stop(
         self,
         mock_execute,
@@ -49,8 +49,8 @@ class ParallelCliTests(unittest.TestCase):
 
         self.assertEqual(1, exit_code)
 
-    @patch("capture_shared.parallel_cli.run_gpio_edge_logger")
-    @patch("capture_shared.parallel_cli.capture_images")
+    @patch("parallel_cli.run_gpio_edge_logger")
+    @patch("parallel_cli.capture_images")
     def test_main_runs_camera_only_when_no_gpio_spec_provided(
         self,
         mock_capture_images,
@@ -72,8 +72,8 @@ class ParallelCliTests(unittest.TestCase):
         self.assertEqual(1, mock_capture_images.call_count)
         self.assertEqual(0, mock_run_gpio_edge_logger.call_count)
 
-    @patch("capture_shared.parallel_cli.run_gpio_edge_logger")
-    @patch("capture_shared.parallel_cli.capture_images")
+    @patch("parallel_cli.run_gpio_edge_logger")
+    @patch("parallel_cli.capture_images")
     def test_main_runs_camera_and_multiple_gpio_workers(
         self, mock_capture_images, mock_run_gpio_edge_logger
     ):

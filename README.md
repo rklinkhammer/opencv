@@ -21,9 +21,10 @@ and save images to a directory for a fixed duration (default: 5 seconds).
 
 ## Project Structure
 
-- `src/camera_capture/`: camera capture runtime, probing, and benchmarking
-- `src/capture_shared/`: shared clocks, timestamp, output, CLI, and parallel orchestration helpers
-- `src/gpio_capture/`: GPIO edge capture runtime and versioned libgpiod runners
+- `src/camera_capture/`: camera runtime and the standalone camera CLI
+- `src/gpio_capture/`: GPIO runtime and the standalone GPIO CLI
+- `src/capture_shared/`: shared camera options, output helpers, and parallel orchestration
+- `src/parallel_cli.py`: unified camera/GPIO CLI
 - `tests/`: pytest test suite (unit and optional hardware tests)
 - `scripts/`: operational scripts (camera smoke test and doxygen scrubber)
 - `docs/doxygen/`: Doxygen config and supporting documentation assets
@@ -281,9 +282,10 @@ below retains the operator-oriented overview.
 
 Package map:
 
-- `src/camera_capture`: camera lifecycle, backend adapters, probe/benchmark utilities, runtime models.
-- `src/gpio_capture`: async edge logger, shared GPIO helpers, libgpiod v1/v2 runner adapters.
-- `src/capture_shared`: timestamp helpers, shared CLI argument composition, parallel orchestration service/CLI.
+- `src/camera_capture`: camera lifecycle, CLI, backend adapters, and probe/benchmark utilities.
+- `src/gpio_capture`: GPIO CLI, edge logger, and libgpiod v1/v2 runner adapters.
+- `src/capture_shared`: timestamp/output helpers, shared camera options, and orchestration.
+- `src/parallel_cli.py`: unified camera/GPIO command.
 
 4. Shared Utilities
 - Timestamp formatters reused across camera and GPIO file naming.

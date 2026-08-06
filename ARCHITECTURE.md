@@ -18,8 +18,8 @@ transactional output.
 - `writer.py`: bounded asynchronous writer, lifecycle state, overlay, EXIF, and atomic
   output publication.
 - `capture.py`: fixed-duration orchestration and structured capture results.
-- `probe.py`, `benchmarks.py`, `reporting.py`: measurement and presentation helpers.
-- `cli.py`: standalone camera capture, probe, and benchmark CLI.
+- `probe.py`, `benchmarks.py`: camera measurement helpers.
+- `cli.py`: standalone camera CLI and its output formatting.
 
 ### `gpio_capture`
 
@@ -28,17 +28,18 @@ transactional output.
 - `core.py`: tags, value-file output, and stop-condition adaptation.
 - `runner_common.py`: version-neutral initial-value and edge-event loop.
 - `runner_v1.py`, `runner_v2.py`: isolated libgpiod API adapters.
-- `gpio_cli.py`: standalone GPIO edge-logging CLI.
+- `cli.py`: standalone GPIO edge-logging CLI.
 
 ### `capture_shared`
 
 - `errors.py`: typed domain exception hierarchy.
 - `clocks.py`, `timestamps.py`: monotonic control time and wall-clock artifact time.
 - `output.py`: collision-safe reservations, atomic transactions, and stale recovery.
-- `capture_cli.py`: shared camera arguments and config mapping.
+- `cli_options.py`: camera arguments shared by the standalone and unified CLIs.
 - `runtime.py`: duration and cooperative stop-event logic.
 - `parallel_service.py`: presentation-free camera/GPIO orchestration.
-- `parallel_cli.py`: unified parsing and result presentation.
+
+`parallel_cli.py` at the source root contains unified parsing and result presentation.
 
 ## Camera Capture Flow
 

@@ -37,11 +37,12 @@ dev = [
 
 [project.scripts]
 camera-capture = "camera_capture.cli:main"
-camera-gpio-edge = "gpio_capture.gpio_cli:main"
-capture-main = "capture_shared.parallel_cli:main"
+camera-gpio-edge = "gpio_capture.cli:main"
+capture-main = "parallel_cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+py-modules = ["parallel_cli"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
