@@ -1,4 +1,4 @@
-"""Command-line interface for camera capture, probe, and benchmark flows."""
+"""Command-line interface for camera capture and benchmarks."""
 
 from __future__ import annotations
 
@@ -11,32 +11,10 @@ from capture_shared.cli_options import build_capture_config
 
 from .benchmarks import benchmark_capture_only
 from .capture import capture_images
-from .models import ProbeResult
-from .probe import probe_camera_modes
 
 
 def format_exception(exc: Exception) -> str:
     return f"{type(exc).__name__}: {exc}"
-
-
-def print_probe_results(results: list[ProbeResult], best: ProbeResult | None) -> None:
-    if not results:
-        print("No probe results were produced.")
-        return
-
-    print("Mode probe results:")
-    for result in results:
-        print(
-            f"- {result.fourcc} {result.width}x{result.height} "
-            f"req_fps={result.requested_fps:.1f} measured_fps={result.measured_fps:.2f} "
-            f"frames={result.measured_frames} reported_fps={result.reported_fps:.2f}"
-        )
-
-    if best is not None:
-        print(
-            "Best mode: "
-            f"{best.fourcc} {best.width}x{best.height} measured_fps={best.measured_fps:.2f}"
-        )
 
 
 def print_backend_benchmark_results(
@@ -76,17 +54,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Capture duration in seconds (default: 5).",
     )
     add_common_camera_args(parser)
-    parser.add_argument(
-        "--probe-modes",
-        action="store_true",
-        help="Probe common camera modes for measured FPS and exit.",
-    )
-    parser.add_argument(
-        "--probe-duration",
-        type=float,
-        default=5.0,
-        help="Duration per mode in probe mode, seconds (default: 5).",
-    )
     parser.add_argument(
         "--benchmark-backends",
         action="store_true",
@@ -133,19 +100,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.benchmark_backends and args.benchmark_jetson_csi:
         print("Error: --benchmark-backends and --benchmark-jetson-csi are mutually exclusive")
         return 1
-
-    if args.probe_modes:
-        try:
-            results, best = probe_camera_modes(
-                camera_index=args.camera_index,
-                duration_seconds=args.probe_duration,
-            )
-        except Exception as exc:
-            print(f"Error: {format_exception(exc)}")
-            return 1
-
-        print_probe_results(results, best)
-        return 0
 
     if args.benchmark_backends:
         return _run_backend_benchmark(args)

@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from contextlib import contextmanager
+from typing import Any, Iterator, Protocol
 
 import numpy as np
 
-from capture_shared.errors import BackendError, ConfigurationError
+from capture_shared.errors import CaptureError, ConfigurationError
 
 from .models import CaptureConfig
-from .validators import normalize_backend, normalize_fourcc
+from .validators import camera_open_error, normalize_backend, normalize_fourcc
 
 _GSTREAMER_SAMPLE_TIMEOUT_MILLISECONDS = 100
 
@@ -108,7 +109,7 @@ class NativeGStreamerCapture:
             gi.require_version("Gst", "1.0")
             from gi.repository import Gst
         except ImportError as exc:
-            raise BackendError(
+            raise CaptureError(
                 "Native GStreamer backend requires PyGObject. "
                 "Install python3-gi and gir1.2-gstreamer-1.0."
             ) from exc
@@ -120,11 +121,11 @@ class NativeGStreamerCapture:
         try:
             pipeline = Gst.parse_launch(pipeline_text)
         except Exception as exc:
-            raise BackendError(f"Invalid GStreamer pipeline: {exc}") from exc
+            raise CaptureError(f"Invalid GStreamer pipeline: {exc}") from exc
 
         appsink = pipeline.get_by_name("appsink")
         if appsink is None:
-            raise BackendError(
+            raise CaptureError(
                 "GStreamer pipeline must contain an appsink named 'appsink' "
                 "for native backend frame extraction."
             )
@@ -224,6 +225,20 @@ def create_capture_backend(name: str) -> CaptureBackend:
     return NativeGStreamerBackend()
 
 
-def open_capture(config: CaptureConfig, cv2_module: Any) -> CaptureHandle:
-    backend = create_capture_backend(config.capture_backend)
-    return backend.open(config, cv2_module)
+@contextmanager
+def open_camera(
+    config: CaptureConfig,
+    cv2_module: Any,
+    backend: CaptureBackend,
+) -> Iterator[CaptureHandle]:
+    capture = backend.open(config, cv2_module)
+    try:
+        if not capture.isOpened():
+            raise CaptureError(camera_open_error(config.camera_index))
+        backend.configure(capture, config, cv2_module)
+        yield capture
+    finally:
+        try:
+            capture.release()
+        except Exception:
+            pass

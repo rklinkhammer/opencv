@@ -88,7 +88,7 @@ In Visual Studio, open the repository folder, build the `Dockerfile`, and use
 
 The package installs three entry points:
 
-- `camera-capture`: standalone camera capture, probe, and benchmark workflows
+- `camera-capture`: standalone camera capture and benchmark workflows
 - `camera-gpio-edge`: standalone GPIO edge logging
 - `capture-main`: unified camera and GPIO orchestration
 
@@ -266,7 +266,7 @@ below retains the operator-oriented overview.
 ### System Layers
 
 1. Command Layer
-- `camera-capture`: camera capture, probe, benchmark.
+- `camera-capture`: camera capture and benchmarks.
 - `camera-gpio-edge`: standalone GPIO edge logger.
 - `capture-main`: unified parallel launcher.
 
@@ -282,7 +282,7 @@ below retains the operator-oriented overview.
 
 Package map:
 
-- `src/camera_capture`: camera lifecycle, CLI, backend adapters, and probe/benchmark utilities.
+- `src/camera_capture`: camera lifecycle, CLI, backend adapters, and benchmark utilities.
 - `src/gpio_capture`: GPIO CLI, edge logger, and libgpiod v1/v2 runner adapters.
 - `src/capture_shared`: timestamp/output helpers, shared camera options, and orchestration.
 - `src/parallel_cli.py`: unified camera/GPIO command.
@@ -299,7 +299,7 @@ Camera flow:
 3. Skip warmup frames.
 4. Enqueue frames to writer queue.
 5. Writer thread saves files and optional EXIF/overlay metadata.
-6. Shutdown with queue drain + metrics.
+6. Drain the queue and stop the writer.
 
 GPIO flow:
 1. Validate `GpioEdgeConfig`.
@@ -324,15 +324,15 @@ sequenceDiagram
   participant CLI as capture-main
   participant PS as parallel_service
   participant CAP as capture_images
-  participant SES as CameraSession
+  participant CAM as CameraBackend
   participant WR as AsyncFrameWriter
 
   CLI->>PS: execute_parallel_capture(camera_config, gpio_jobs=[])
   PS->>CAP: capture_fn(camera_config)
-  CAP->>SES: open/configure backend
+  CAP->>CAM: open/configure backend
   CAP->>WR: start()
   loop until duration deadline
-    CAP->>SES: read()
+    CAP->>CAM: read()
     CAP->>WR: submit(FrameRecord)
   end
   CAP->>WR: close()

@@ -55,12 +55,10 @@ class GpioCommonLoopTests(unittest.TestCase):
                 stop_event=None,
             )
 
-            contents = [path.read_text(encoding="utf-8") for path in result.files]
+            contents = [path.read_text(encoding="utf-8") for path in result]
 
         self.assertEqual(["0\n", "1\n", "0\n"], contents)
         self.assertEqual(2, source.wait_calls)
-        self.assertTrue(result.metrics.initial_value_written)
-        self.assertEqual(2, result.metrics.edge_events_written)
 
     def test_duration_stop_writes_initial_file_without_polling(self):
         source = _Source(values=[1], events=[])
@@ -78,9 +76,8 @@ class GpioCommonLoopTests(unittest.TestCase):
                 stop_event=None,
             )
 
-        self.assertEqual(1, len(result.files))
+        self.assertEqual(1, len(result))
         self.assertEqual(0, source.wait_calls)
-        self.assertEqual(1.0, result.metrics.elapsed_seconds)
 
     def test_external_stop_writes_initial_file_without_polling(self):
         stop_event = Event()
@@ -99,9 +96,8 @@ class GpioCommonLoopTests(unittest.TestCase):
                 stop_event=stop_event,
             )
 
-        self.assertEqual(1, len(result.files))
+        self.assertEqual(1, len(result))
         self.assertEqual(0, source.wait_calls)
-        self.assertEqual(0, result.metrics.edge_events_written)
 
 
 if __name__ == "__main__":

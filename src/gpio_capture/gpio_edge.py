@@ -16,7 +16,6 @@ from capture_shared.errors import ConfigurationError, GpioError
 
 from .runner_v1 import run_v1
 from .runner_v2 import run_v2
-from .models import GpioRunResult
 
 
 @dataclass(frozen=True)
@@ -73,22 +72,6 @@ def run_gpio_edge_logger(
     gpiod_module: Any | None = None,
     stop_event: threading.Event | None = None,
 ) -> list[Path]:
-    result = run_gpio_edge_logger_with_result(
-        config,
-        clock=clock,
-        gpiod_module=gpiod_module,
-        stop_event=stop_event,
-    )
-    return list(result.files)
-
-
-def run_gpio_edge_logger_with_result(
-    config: GpioEdgeConfig,
-    *,
-    clock: Clock | None = None,
-    gpiod_module: Any | None = None,
-    stop_event: threading.Event | None = None,
-) -> GpioRunResult:
     validate_gpio_config(config)
 
     if gpiod_module is None:

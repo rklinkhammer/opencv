@@ -1,15 +1,15 @@
-"""Unit tests for CameraSession resource lifetime ownership."""
+"""Tests for opening and releasing camera handles."""
 
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from camera_capture.backends import open_camera
 from camera_capture.models import CaptureConfig
-from camera_capture.session import CameraSession
-from capture_shared.errors import CameraOpenError
+from capture_shared.errors import CaptureError
 
 
-class CameraSessionTests(unittest.TestCase):
+class OpenCameraTests(unittest.TestCase):
     def setUp(self):
         self.config = CaptureConfig(output_dir=Path("."), camera_index=2)
         self.cv2_module = object()
@@ -19,14 +19,14 @@ class CameraSessionTests(unittest.TestCase):
         self.backend.open.return_value = self.capture
 
     def test_releases_capture_after_normal_exit(self):
-        with CameraSession(self.config, self.cv2_module, self.backend) as opened:
+        with open_camera(self.config, self.cv2_module, self.backend) as opened:
             self.assertIs(opened, self.capture)
 
         self.capture.release.assert_called_once_with()
 
     def test_releases_capture_when_context_body_raises(self):
         with self.assertRaisesRegex(RuntimeError, "read failed"):
-            with CameraSession(self.config, self.cv2_module, self.backend):
+            with open_camera(self.config, self.cv2_module, self.backend):
                 raise RuntimeError("read failed")
 
         self.capture.release.assert_called_once_with()
@@ -34,8 +34,8 @@ class CameraSessionTests(unittest.TestCase):
     def test_releases_capture_when_handle_is_not_open(self):
         self.capture.isOpened.return_value = False
 
-        with self.assertRaisesRegex(CameraOpenError, "camera at index 2"):
-            with CameraSession(self.config, self.cv2_module, self.backend):
+        with self.assertRaisesRegex(CaptureError, "camera at index 2"):
+            with open_camera(self.config, self.cv2_module, self.backend):
                 pass
 
         self.backend.configure.assert_not_called()
@@ -45,7 +45,7 @@ class CameraSessionTests(unittest.TestCase):
         self.backend.configure.side_effect = RuntimeError("configuration failed")
 
         with self.assertRaisesRegex(RuntimeError, "configuration failed"):
-            with CameraSession(self.config, self.cv2_module, self.backend):
+            with open_camera(self.config, self.cv2_module, self.backend):
                 pass
 
         self.capture.release.assert_called_once_with()
@@ -54,7 +54,7 @@ class CameraSessionTests(unittest.TestCase):
         self.capture.release.side_effect = RuntimeError("release failed")
 
         with self.assertRaisesRegex(RuntimeError, "read failed"):
-            with CameraSession(self.config, self.cv2_module, self.backend):
+            with open_camera(self.config, self.cv2_module, self.backend):
                 raise RuntimeError("read failed")
 
 

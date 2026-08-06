@@ -7,9 +7,8 @@ import time
 
 from capture_shared.clocks import Clock, SystemClock
 
-from .backends import create_capture_backend
+from .backends import create_capture_backend, open_camera
 from .models import CaptureConfig
-from .session import CameraSession
 from .validators import validate_capture_config, validate_positive_duration
 
 _WARMUP_RETRY_SECONDS = 0.01
@@ -37,7 +36,7 @@ def benchmark_capture_only(
     active_clock = clock or SystemClock()
 
     capture_backend = create_capture_backend(backend_name)
-    with CameraSession(config, cv2_module, capture_backend) as capture:
+    with open_camera(config, cv2_module, capture_backend) as capture:
         for _ in range(warmup_attempt_limit):
             if skipped_warmup_frames >= config.warmup_frames:
                 break

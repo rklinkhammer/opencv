@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from capture_shared.clocks import Clock
 from capture_shared.errors import ConfigurationError, GpioError
 
 from .runner_common import run_event_logger
-from .models import GpioRunResult
 
 if TYPE_CHECKING:
     from .gpio_edge import GpioEdgeConfig
@@ -34,7 +34,7 @@ def run_v1(
     clock: Clock,
     gpiod_module: Any,
     stop_event,
-) -> GpioRunResult:
+) -> list[Path]:
     """Run GPIO edge logging using libgpiod v1 APIs."""
 
     request_type = event_request_type(config.edge, gpiod_module)

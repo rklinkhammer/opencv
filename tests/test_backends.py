@@ -8,10 +8,9 @@ from camera_capture.backends import (
     NativeGStreamerBackend,
     OpenCvBackend,
     create_capture_backend,
-    open_capture,
+    open_camera,
 )
 from camera_capture.models import CaptureConfig
-from camera_capture.session import CameraSession
 from capture_shared.errors import ConfigurationError
 
 
@@ -50,22 +49,7 @@ class BackendFactoryTests(unittest.TestCase):
 
         self.assertIs(opened, capture)
 
-    def test_open_capture_compatibility_helper_uses_factory(self):
-        config = CaptureConfig(output_dir=Path("."), capture_backend="opencv")
-        cv2_module = object()
-        capture = MagicMock()
-        backend = MagicMock()
-        backend.open.return_value = capture
-
-        with patch("camera_capture.backends.create_capture_backend", return_value=backend):
-            opened = open_capture(config, cv2_module)
-
-        self.assertIs(opened, capture)
-        backend.open.assert_called_once_with(config, cv2_module)
-
-
-class CameraSessionBackendTests(unittest.TestCase):
-    def test_session_uses_injected_backend_without_backend_branching(self):
+    def test_open_camera_uses_injected_backend(self):
         config = CaptureConfig(output_dir=Path("."), capture_backend="gstreamer")
         cv2_module = object()
         capture = MagicMock()
@@ -73,7 +57,7 @@ class CameraSessionBackendTests(unittest.TestCase):
         backend = MagicMock()
         backend.open.return_value = capture
 
-        with CameraSession(config, cv2_module, backend) as opened:
+        with open_camera(config, cv2_module, backend) as opened:
             self.assertIs(opened, capture)
 
         backend.open.assert_called_once_with(config, cv2_module)

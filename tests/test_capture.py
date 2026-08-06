@@ -9,9 +9,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from capture_shared.errors import CameraOpenError, ConfigurationError, WriterError
-from camera_capture.capture import capture_images, probe_camera_modes
-from camera_capture.models import CaptureConfig, ProbeResult
+from capture_shared.errors import CaptureError, ConfigurationError
+from camera_capture.capture import capture_images
+from camera_capture.models import CaptureConfig
 
 
 class _SequenceClock:
@@ -176,7 +176,7 @@ class CaptureImagesTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = CaptureConfig(output_dir=Path(tmp_dir), duration_seconds=5.0)
-            with self.assertRaises(CameraOpenError):
+            with self.assertRaises(CaptureError):
                 capture_images(
                     config,
                     clock=_SequenceClock([0.0]),
@@ -350,7 +350,7 @@ class CaptureImagesTests(unittest.TestCase):
                 write_queue_size=1,
                 write_exif_timestamp=False,
             )
-            with self.assertRaises(WriterError):
+            with self.assertRaises(CaptureError):
                 capture_images(
                     config,
                     clock=_SequenceClock(times),
@@ -627,25 +627,6 @@ class CaptureImagesTests(unittest.TestCase):
         self.assertIn((fake_cv2.CAP_PROP_EXPOSURE, -6.0), fake_capture.set_calls)
         self.assertIn((fake_cv2.CAP_PROP_GAIN, 8.0), fake_capture.set_calls)
         self.assertIn((fake_cv2.CAP_PROP_BRIGHTNESS, 42.0), fake_capture.set_calls)
-
-    def test_probe_camera_modes_returns_best_result(self):
-        fake_capture = FakeVideoCapture(opened=True, read_sequence=[(True, "frame")] * 200)
-        fake_cv2 = FakeCv2(fake_capture)
-
-        results, best = probe_camera_modes(
-            camera_index=0, duration_seconds=0.01, cv2_module=fake_cv2
-        )
-
-        self.assertGreater(len(results), 0)
-        self.assertIsNotNone(best)
-        self.assertIsInstance(results[0], ProbeResult)
-
-    def test_probe_camera_modes_rejects_negative_camera_index(self):
-        fake_capture = FakeVideoCapture(opened=True, read_sequence=[(True, "frame")])
-        fake_cv2 = FakeCv2(fake_capture)
-
-        with self.assertRaises(ConfigurationError):
-            probe_camera_modes(camera_index=-1, duration_seconds=0.01, cv2_module=fake_cv2)
 
 
 if __name__ == "__main__":

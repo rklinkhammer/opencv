@@ -9,7 +9,7 @@ from threading import Barrier, Event, Lock, Thread, Timer
 
 from camera_capture.models import CaptureConfig, FrameRecord
 from camera_capture.writer import AsyncFrameWriter, WriterState
-from capture_shared.errors import WriterError
+from capture_shared.errors import CaptureError
 
 
 class _Cv2Writer:
@@ -135,18 +135,13 @@ class WriterLifecycleTests(unittest.TestCase):
             self.assertTrue(self._submit(writer, 0))
             _wait_for_state(writer, WriterState.FAILED)
 
-            with self.assertRaisesRegex(WriterError, "Failed to save image"):
+            with self.assertRaisesRegex(CaptureError, "Failed to save image"):
                 writer.raise_if_failed()
             result = writer.close()
-            metrics = writer.snapshot_metrics(result)
 
         self.assertEqual("writer-error", result.mode)
         self.assertIs(writer.state, WriterState.FAILED)
         self.assertEqual([], writer.saved_images)
-        self.assertEqual(1, metrics.frames_submitted)
-        self.assertEqual(0, metrics.frames_written)
-        self.assertEqual(1, metrics.write_failures)
-        self.assertEqual("writer-error", metrics.close_mode)
 
     def test_submit_after_failure_raises_original_writer_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -155,7 +150,7 @@ class WriterLifecycleTests(unittest.TestCase):
             self.assertTrue(self._submit(writer, 0))
             _wait_for_state(writer, WriterState.FAILED)
 
-            with self.assertRaisesRegex(WriterError, "Failed to save image"):
+            with self.assertRaisesRegex(CaptureError, "Failed to save image"):
                 self._submit(writer, 1)
             writer.close()
 
@@ -165,14 +160,14 @@ class WriterLifecycleTests(unittest.TestCase):
             writer.start()
             writer.close()
 
-            with self.assertRaisesRegex(WriterError, "state is stopped"):
+            with self.assertRaisesRegex(CaptureError, "state is stopped"):
                 self._submit(writer, 0)
 
     def test_submit_before_start_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             writer = self._writer(Path(tmp_dir), _Cv2Writer())
 
-            with self.assertRaisesRegex(WriterError, "state is new"):
+            with self.assertRaisesRegex(CaptureError, "state is new"):
                 self._submit(writer, 0)
 
     def test_close_timeout_leaves_stopping_state_and_can_be_retried(self):
@@ -225,7 +220,7 @@ class WriterLifecycleTests(unittest.TestCase):
                             deadline=time.perf_counter() + 1.0,
                             monotonic=time.perf_counter,
                         )
-                    except WriterError as exc:
+                    except CaptureError as exc:
                         errors.append(exc)
                         return
                     if submitted:
@@ -245,7 +240,7 @@ class WriterLifecycleTests(unittest.TestCase):
 
         self.assertEqual("normal", result.mode)
         self.assertTrue(all(not thread.is_alive() for thread in threads))
-        self.assertTrue(all(isinstance(error, WriterError) for error in errors))
+        self.assertTrue(all(isinstance(error, CaptureError) for error in errors))
         self.assertEqual(accepted, len(writer.saved_images))
 
 

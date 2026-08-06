@@ -7,14 +7,14 @@ import os
 import time
 from uuid import uuid4
 
-from capture_shared.errors import OutputError
+from capture_shared.errors import CaptureError
 
 
 def reserve_unique_path(output_dir: Path, file_stem: str, extension: str) -> Path:
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        raise OutputError(f"Unable to create output directory {output_dir}: {exc}") from exc
+        raise CaptureError(f"Unable to create output directory {output_dir}: {exc}") from exc
     extension = extension.lstrip(".")
     sequence = 0
     while True:
@@ -26,7 +26,7 @@ def reserve_unique_path(output_dir: Path, file_stem: str, extension: str) -> Pat
         except FileExistsError:
             sequence += 1
         except OSError as exc:
-            raise OutputError(f"Unable to reserve output path {output_path}: {exc}") from exc
+            raise CaptureError(f"Unable to reserve output path {output_path}: {exc}") from exc
 
 
 def temporary_peer_path(output_path: Path) -> Path:
@@ -43,7 +43,7 @@ class OutputTransaction:
         try:
             os.replace(self.temporary, self.destination)
         except OSError as exc:
-            raise OutputError(f"Unable to commit output {self.destination}: {exc}") from exc
+            raise CaptureError(f"Unable to commit output {self.destination}: {exc}") from exc
         self._committed = True
         return self.destination
 
@@ -86,4 +86,4 @@ def write_unique_text(output_dir: Path, file_stem: str, extension: str, content:
         return output_path
     except OSError as exc:
         output_path.unlink(missing_ok=True)
-        raise OutputError(f"Unable to write output {output_path}: {exc}") from exc
+        raise CaptureError(f"Unable to write output {output_path}: {exc}") from exc

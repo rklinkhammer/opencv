@@ -1,11 +1,11 @@
-"""Integration tests for the lightweight frame transformation seam."""
+"""Integration test for the optional frame transform."""
 
 import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from camera_capture.capture import capture_images, capture_images_with_result
+from camera_capture.capture import capture_images
 from camera_capture.models import CaptureConfig, FrameRecord
 
 
@@ -58,46 +58,12 @@ class _RecordingTransform:
     def __init__(self):
         self.frames = []
 
-    def apply(self, frame: FrameRecord) -> FrameRecord:
+    def __call__(self, frame: FrameRecord) -> FrameRecord:
         self.frames.append(frame)
         return replace(frame, image=f"processed-{frame.image}")
 
 
 class FramePipelineTests(unittest.TestCase):
-    def test_richer_capture_api_reports_deterministic_metrics(self):
-        capture = _Capture()
-        cv2_module = _Cv2(capture)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config = CaptureConfig(
-                output_dir=Path(tmp_dir),
-                duration_seconds=0.1,
-                warmup_frames=0,
-                timestamp_in_filename=False,
-                write_exif_timestamp=False,
-            )
-            result = capture_images_with_result(
-                config,
-                clock=_Clock(),
-                sleep_provider=lambda _seconds: None,
-                cv2_module=cv2_module,
-            )
-
-        self.assertEqual(1, len(result.images))
-        self.assertEqual(1, result.capture_metrics.frames_read)
-        self.assertEqual(1, result.capture_metrics.frames_enqueued)
-        self.assertEqual(1, result.capture_metrics.frames_saved)
-        self.assertEqual(0, result.capture_metrics.read_failures)
-        self.assertEqual(0, result.capture_metrics.warmup_requested)
-        self.assertEqual(0, result.capture_metrics.warmup_completed)
-        self.assertEqual(0, result.capture_metrics.queue_full_events)
-        self.assertAlmostEqual(0.2, result.capture_metrics.elapsed_seconds)
-        self.assertEqual(1, result.writer_metrics.frames_submitted)
-        self.assertEqual(1, result.writer_metrics.frames_written)
-        self.assertEqual(0, result.writer_metrics.write_failures)
-        self.assertEqual("normal", result.writer_metrics.close_mode)
-        self.assertEqual(0, result.writer_metrics.pending_items_at_close)
-
     def test_injected_transform_runs_between_capture_and_writer(self):
         capture = _Capture()
         cv2_module = _Cv2(capture)

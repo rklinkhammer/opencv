@@ -12,10 +12,10 @@ import time
 from typing import Any, Callable
 
 from capture_shared.output import OutputTransaction
-from capture_shared.errors import WriterError
+from capture_shared.errors import CaptureError
 from capture_shared.timestamps import format_filename_timestamp, format_iso_timestamp
 
-from .models import CaptureConfig, FrameRecord, WriterMetrics
+from .models import CaptureConfig, FrameRecord
 
 _QUEUE_GET_TIMEOUT_SECONDS = 0.1
 _QUEUE_PUT_TIMEOUT_SECONDS = 0.05
@@ -40,7 +40,7 @@ def write_exif_timestamp(image_path: Path, capture_time: float) -> None:
     try:
         import piexif
     except ImportError as exc:
-        raise WriterError("EXIF writing requires piexif") from exc
+        raise CaptureError("EXIF writing requires piexif") from exc
 
     from capture_shared.timestamps import capture_datetime
 
@@ -87,10 +87,6 @@ class AsyncFrameWriter:
         self._error: Exception | None = None
         self._stop_requested = False
         self._close_result: WriterCloseResult | None = None
-        self._frames_submitted = 0
-        self._frames_written = 0
-        self._write_failures = 0
-        self._queue_full_events = 0
         self.saved_images: list[Path] = []
         self._thread = Thread(target=self._run, name="camera-capture-writer", daemon=True)
         self._thread_started = False
@@ -103,13 +99,13 @@ class AsyncFrameWriter:
     def start(self) -> None:
         with self._state_lock:
             if self._state is not WriterState.NEW:
-                raise WriterError(f"Writer cannot start while state is {self._state.value}")
+                raise CaptureError(f"Writer cannot start while state is {self._state.value}")
             self._state = WriterState.RUNNING
             try:
                 self._thread.start()
                 self._thread_started = True
             except Exception as exc:
-                error = WriterError(f"Unable to start writer thread: {exc}")
+                error = CaptureError(f"Unable to start writer thread: {exc}")
                 self._error = error
                 self._state = WriterState.FAILED
                 raise error from exc
@@ -118,7 +114,6 @@ class AsyncFrameWriter:
         with self._state_lock:
             if self._error is None:
                 self._error = error
-                self._write_failures += 1
                 self._state = WriterState.FAILED
 
     def raise_if_failed(self) -> None:
@@ -149,7 +144,7 @@ class AsyncFrameWriter:
             stem += f"_{format_filename_timestamp(frame.captured_at)}"
         with OutputTransaction(self._config.output_dir, stem, self._extension) as output:
             if not self._cv2.imwrite(str(output.temporary), image):
-                raise WriterError(f"Failed to save image: {output.destination}")
+                raise CaptureError(f"Failed to save image: {output.destination}")
             if self._config.write_exif_timestamp and self._extension in {"jpg", "jpeg"}:
                 self._exif_writer(output.temporary, frame.captured_at)
             return output.commit()
@@ -168,8 +163,6 @@ class AsyncFrameWriter:
                     return
                 path = self._save(frame)
                 self.saved_images.append(path)
-                with self._state_lock:
-                    self._frames_written += 1
                 self._logger.info("Saved frame %d to %s", frame.sequence, path)
             except Exception as exc:
                 self._set_error(exc)
@@ -198,7 +191,7 @@ class AsyncFrameWriter:
                 if self._error is not None:
                     raise self._error
                 if self._state is not WriterState.RUNNING:
-                    raise WriterError(
+                    raise CaptureError(
                         f"Writer cannot accept frames while state is {self._state.value}"
                     )
             try:
@@ -207,27 +200,8 @@ class AsyncFrameWriter:
                 else:
                     self._queue.put(frame, timeout=timeout)
             except Full:
-                with self._state_lock:
-                    self._queue_full_events += 1
                 return False
-            with self._state_lock:
-                self._frames_submitted += 1
             return True
-
-    @property
-    def queue_full_events(self) -> int:
-        with self._state_lock:
-            return self._queue_full_events
-
-    def snapshot_metrics(self, close_result: WriterCloseResult) -> WriterMetrics:
-        with self._state_lock:
-            return WriterMetrics(
-                frames_submitted=self._frames_submitted,
-                frames_written=self._frames_written,
-                write_failures=self._write_failures,
-                close_mode=close_result.mode,
-                pending_items_at_close=close_result.pending_items,
-            )
 
     def close(self, *, timeout: float = 5.0) -> WriterCloseResult:
         with self._submit_lock:

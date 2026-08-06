@@ -1,4 +1,4 @@
-"""Contract tests for the PR1 typed exception hierarchy."""
+"""Tests for application errors and error chaining."""
 
 import tempfile
 import unittest
@@ -7,57 +7,32 @@ from unittest.mock import patch
 
 from camera_capture.backends import NativeGStreamerCapture
 from camera_capture.models import CaptureConfig
-from capture_shared.errors import (
-    BackendError,
-    CameraOpenError,
-    CaptureSystemError,
-    ConfigurationError,
-    GpioError,
-    OutputError,
-    ParallelExecutionError,
-    WriterError,
-    WriterTimeoutError,
-)
+from capture_shared.errors import CaptureError, ConfigurationError, GpioError
 from capture_shared.output import OutputTransaction
 from capture_shared.parallel_service import GpioJob, execute_parallel_capture
 from gpio_capture.gpio_edge import GpioEdgeConfig, run_gpio_edge_logger
 
 
 class ErrorHierarchyTests(unittest.TestCase):
-    def test_domain_errors_share_one_catchable_base(self):
-        error_types = (
-            ConfigurationError,
-            BackendError,
-            CameraOpenError,
-            WriterError,
-            WriterTimeoutError,
-            OutputError,
-            GpioError,
-            ParallelExecutionError,
-        )
+    def test_specific_errors_share_one_catchable_base(self):
+        self.assertTrue(issubclass(ConfigurationError, CaptureError))
+        self.assertTrue(issubclass(GpioError, CaptureError))
 
-        for error_type in error_types:
-            with self.subTest(error_type=error_type.__name__):
-                self.assertTrue(issubclass(error_type, CaptureSystemError))
-
-        self.assertTrue(issubclass(CameraOpenError, BackendError))
-        self.assertTrue(issubclass(WriterTimeoutError, WriterError))
-
-    def test_native_gstreamer_dependency_failure_is_backend_error(self):
+    def test_native_gstreamer_dependency_failure_is_capture_error(self):
         config = CaptureConfig(output_dir=Path("."), capture_backend="gstreamer")
 
         with patch.dict("sys.modules", {"gi": None}):
-            with self.assertRaises(BackendError) as raised:
+            with self.assertRaises(CaptureError) as raised:
                 NativeGStreamerCapture(config)
 
         self.assertIsInstance(raised.exception.__cause__, ImportError)
 
-    def test_output_commit_failure_is_output_error(self):
+    def test_output_commit_failure_is_capture_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             transaction = OutputTransaction(Path(tmp_dir), "frame_000000", "jpg")
             transaction.temporary.write_bytes(b"image")
             with patch("capture_shared.output.os.replace", side_effect=OSError("disk full")):
-                with self.assertRaisesRegex(OutputError, "Unable to commit output") as raised:
+                with self.assertRaisesRegex(CaptureError, "Unable to commit output") as raised:
                     transaction.commit()
             transaction.close()
 
@@ -123,7 +98,7 @@ class ErrorHierarchyTests(unittest.TestCase):
 
         self.assertTrue(gpiod.chip.closed)
 
-    def test_missing_parallel_worker_result_is_parallel_execution_error(self):
+    def test_missing_parallel_worker_result_is_capture_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = CaptureConfig(output_dir=Path(tmp_dir), duration_seconds=0.1)
             outcome = execute_parallel_capture(
@@ -136,7 +111,7 @@ class ErrorHierarchyTests(unittest.TestCase):
                 gpio_fn=lambda *_args, **_kwargs: None,
             )
 
-        self.assertIsInstance(outcome.workers[0].error, ParallelExecutionError)
+        self.assertIsInstance(outcome.workers[0].error, CaptureError)
 
 
 if __name__ == "__main__":

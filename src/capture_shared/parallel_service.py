@@ -8,7 +8,7 @@ from threading import Event, Thread
 import time
 from typing import Callable
 
-from capture_shared.errors import ParallelExecutionError
+from capture_shared.errors import CaptureError
 from camera_capture.models import CaptureConfig
 from gpio_capture.gpio_edge import GpioEdgeConfig
 
@@ -98,9 +98,9 @@ def execute_parallel_capture(
     outcomes: list[WorkerOutcome] = []
     for job, thread, raw in zip(gpio_jobs, threads, results):
         if thread.is_alive():
-            raw = ParallelExecutionError("worker did not stop before the join timeout")
+            raw = CaptureError("worker did not stop before the join timeout")
         elif raw is None:
-            raw = ParallelExecutionError("worker exited without reporting a result")
+            raw = CaptureError("worker exited without reporting a result")
         if isinstance(raw, Exception):
             outcomes.append(WorkerOutcome(key=job.key, error=raw))
         else:

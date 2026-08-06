@@ -1,6 +1,6 @@
 """Unit tests for camera CLI command flows and output rendering.
 
-These tests validate argument wiring, probe/benchmark paths, and non-zero exit
+These tests validate argument wiring, benchmark paths, and non-zero exit
 behavior when runtime operations fail.
 """
 
@@ -102,27 +102,6 @@ class CliTests(unittest.TestCase):
         )
 
         self.assertEqual(1, exit_code)
-
-    @patch("camera_capture.cli.capture_images")
-    @patch("camera_capture.cli.probe_camera_modes")
-    def test_main_probe_mode(self, mock_probe_camera_modes, mock_capture_images):
-        mock_probe_camera_modes.return_value = ([], None)
-
-        exit_code = main(
-            [
-                "--output-dir",
-                "./captures",
-                "--probe-modes",
-                "--probe-duration",
-                "1",
-                "--camera-index",
-                "0",
-            ]
-        )
-
-        self.assertEqual(0, exit_code)
-        mock_probe_camera_modes.assert_called_once_with(camera_index=0, duration_seconds=1.0)
-        mock_capture_images.assert_not_called()
 
     @patch("camera_capture.cli.capture_images")
     def test_main_benchmark_mode(self, mock_capture_images):
