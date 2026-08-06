@@ -31,7 +31,7 @@ RUN python3 -m venv --system-site-packages "$VIRTUAL_ENV" \
 
 WORKDIR /workspace
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md compose.yaml ./
 COPY src ./src
 COPY typings ./typings
 RUN pip install --no-cache-dir -e '.[dev]'

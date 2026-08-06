@@ -358,7 +358,7 @@ class NativeGStreamerCapture:
 
     def _verify_caps(self, structure: Any, width: int, height: int) -> None:
         pixel_format = str(structure.get_value("format") or "")
-        fps = _gstreamer_fps(structure.get_value("framerate"))
+        fps = _gstreamer_structure_fps(structure)
         details = f"width={width}, height={height}, fps={fps:g}, format={pixel_format}"
         if self._reporter is not None:
             self._reporter(f"GStreamer negotiated: {details}")
@@ -459,4 +459,21 @@ def _gstreamer_fps(value: Any) -> float:
     try:
         return float(value)
     except (TypeError, ValueError) as exc:
+        raise CaptureError("GStreamer caps do not contain a valid framerate") from exc
+
+
+def _gstreamer_structure_fps(structure: Any) -> float:
+    get_fraction = getattr(structure, "get_fraction", None)
+    if get_fraction is not None:
+        try:
+            valid, numerator, denominator = get_fraction("framerate")
+            if valid and denominator:
+                return float(numerator) / float(denominator)
+        except (TypeError, ValueError):
+            pass
+        raise CaptureError("GStreamer caps do not contain a valid framerate")
+
+    try:
+        return _gstreamer_fps(structure.get_value("framerate"))
+    except (KeyError, TypeError, ValueError) as exc:
         raise CaptureError("GStreamer caps do not contain a valid framerate") from exc

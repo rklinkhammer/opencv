@@ -317,6 +317,33 @@ class NativeGStreamerReadTests(unittest.TestCase):
         capture._verify_caps(Structure(framerate=fraction), 2, 2)  # noqa: SLF001
         capture._verify_caps(Structure(framerate=30.0), 2, 2)  # noqa: SLF001
 
+    def test_framerate_uses_typed_gstreamer_fraction_reader(self):
+        class GstStructure(Structure):
+            def get_fraction(self, name):
+                self.assert_field(name)
+                return True, 30000, 1000
+
+            def get_value(self, name):
+                if name == "framerate":
+                    raise TypeError("unknown type GstFraction")
+                return super().get_value(name)
+
+            def assert_field(self, name):
+                if name != "framerate":
+                    raise AssertionError(name)
+
+        capture = make_capture([])
+
+        capture._verify_caps(GstStructure(), 2, 2)  # noqa: SLF001
+
+    def test_invalid_typed_gstreamer_fraction_is_a_capture_error(self):
+        class GstStructure(Structure):
+            def get_fraction(self, _name):
+                return False, 0, 1
+
+        with self.assertRaisesRegex(CaptureError, "valid framerate"):
+            make_capture([])._verify_caps(GstStructure(), 2, 2)  # noqa: SLF001
+
     def test_invalid_framerate_is_a_capture_error(self):
         capture = make_capture([])
 

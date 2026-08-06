@@ -251,6 +251,7 @@ class BackendFactoryTests(unittest.TestCase):
             "format": "BGR",
             "framerate": Fraction(),
         }[name]
+        structure.get_fraction.return_value = (True, 30, 1)
         capture = object.__new__(NativeGStreamerCapture)
         capture._config = CaptureConfig(  # noqa: SLF001
             output_dir=Path("."), frame_width=640, frame_height=480, fps=30
