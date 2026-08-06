@@ -559,6 +559,17 @@ Canonical test runner:
 
 The suite measures branch coverage for `src` and enforces a 75% project minimum.
 
+Run the camera-free GStreamer integration test in the Docker image:
+
+```bash
+docker compose build tests
+docker compose run --rm tests pytest -q -m gstreamer
+```
+
+It uses `videotestsrc` and a named `appsink`; no `/dev/videoX` device is required. The
+test skips automatically outside environments with PyGObject and the required GStreamer
+plugins.
+
 Hardware tests are opt-in:
 
 ```bash

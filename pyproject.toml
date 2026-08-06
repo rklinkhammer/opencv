@@ -55,6 +55,7 @@ target-version = "py310"
 pythonpath = ["src"]
 testpaths = ["tests"]
 markers = [
+    "gstreamer: requires the GStreamer runtime but no camera hardware",
     "hardware: requires explicitly enabled camera or GPIO hardware",
 ]
 
