@@ -24,18 +24,6 @@ def benchmark_capture_only(
     sleep_provider: Callable[[float], None] = time.sleep,
     cv2_module: object | None = None,
 ) -> tuple[int, float, float]:
-    """Measure backend ingest FPS without writing frames to disk.
-
-    Args:
-        config: Capture configuration and backend selection.
-        duration_seconds: Benchmark runtime in seconds.
-        clock: Injectable wall/monotonic clock.
-        sleep_provider: Injectable sleep function for tests.
-        cv2_module: Optional OpenCV-like module override.
-
-    Returns:
-        Tuple of (frames_read, elapsed_seconds, measured_fps).
-    """
     validate_positive_duration(duration_seconds)
     backend_name, _ = validate_capture_config(config)
 

@@ -21,8 +21,6 @@ from .models import GpioRunResult
 
 @dataclass(frozen=True)
 class GpioEdgeConfig:
-    """Configuration for asynchronous GPIO edge logging."""
-
     output_dir: Path
     chip_name: str
     line_offset: int
@@ -35,8 +33,6 @@ class GpioEdgeConfig:
 
 
 def validate_gpio_config(config: GpioEdgeConfig) -> None:
-    """Validate the complete runtime contract for GPIO edge logging."""
-
     if config.output_dir is None:
         raise ConfigurationError("output_dir must be provided")
     if not config.chip_name.strip():
@@ -56,8 +52,6 @@ def validate_gpio_config(config: GpioEdgeConfig) -> None:
 
 
 def _import_gpiod() -> Any:
-    """Import libgpiod bindings and raise actionable install guidance on failure."""
-
     try:
         import gpiod
     except ImportError as exc:  # pragma: no cover - environment dependent
@@ -69,8 +63,6 @@ def _import_gpiod() -> Any:
 
 
 def _is_gpiod_v2(gpiod_module: Any) -> bool:
-    """Detect libgpiod v2 API surface by required attribute presence."""
-
     return all(hasattr(gpiod_module, attr) for attr in ["request_lines", "LineSettings", "line"])
 
 
@@ -81,8 +73,6 @@ def run_gpio_edge_logger(
     gpiod_module: Any | None = None,
     stop_event: threading.Event | None = None,
 ) -> list[Path]:
-    """Run asynchronous edge logging and return written file paths."""
-
     result = run_gpio_edge_logger_with_result(
         config,
         clock=clock,
@@ -99,14 +89,6 @@ def run_gpio_edge_logger_with_result(
     gpiod_module: Any | None = None,
     stop_event: threading.Event | None = None,
 ) -> GpioRunResult:
-    """Run asynchronous edge logging and return files with structured metrics.
-
-    Execution flow:
-    1. Validate user-facing config constraints.
-    2. Resolve libgpiod module and active clock adapters.
-    3. Dispatch to version-specific runner (`run_v1`/`run_v2`).
-    """
-
     validate_gpio_config(config)
 
     if gpiod_module is None:

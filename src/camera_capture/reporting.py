@@ -6,14 +6,10 @@ from .models import ProbeResult
 
 
 def format_exception(exc: Exception) -> str:
-    """Format exceptions consistently for CLI output."""
-
     return f"{type(exc).__name__}: {exc}"
 
 
 def print_probe_results(results: list[ProbeResult], best: ProbeResult | None) -> None:
-    """Print mode probe results in a human-readable table-style format."""
-
     if not results:
         print("No probe results were produced.")
         return
@@ -43,8 +39,6 @@ def print_backend_benchmark_results(
     mode_name: str,
     results: list[tuple[str, int, float, float, str]],
 ) -> bool:
-    """Print backend benchmark table and return whether any backend failed."""
-
     print(f"Backend benchmark results ({mode_name}):")
     failed = False
     for backend, frames, elapsed, saved_fps, status in results:

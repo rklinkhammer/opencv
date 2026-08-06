@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol, cast
 
 from capture_shared.clocks import Clock, SystemClock
 
@@ -13,15 +12,6 @@ from .session import CameraSession
 from .validators import validate_capture_config
 
 
-class CapturePropertyReader(Protocol):
-    """OpenCV capture surface used only for querying reported properties."""
-
-    def get(self, property_id: int) -> float:
-        """Return the backend-reported value for an OpenCV property identifier."""
-
-        ...
-
-
 def probe_camera_modes(
     *,
     camera_index: int,
@@ -29,16 +19,6 @@ def probe_camera_modes(
     cv2_module: object | None = None,
     clock: Clock | None = None,
 ) -> tuple[list[ProbeResult], ProbeResult | None]:
-    """Probe common camera modes and report measured read FPS.
-
-    Args:
-        camera_index: Camera index passed to OpenCV VideoCapture.
-        duration_seconds: Probe duration per candidate mode.
-        cv2_module: Optional OpenCV-like module override for tests.
-
-    Returns:
-        Pair of (all_results, best_result).
-    """
     base_config = CaptureConfig(
         output_dir=Path("."),
         duration_seconds=duration_seconds,
@@ -84,8 +64,7 @@ def probe_camera_modes(
             measured_fps = frames / elapsed
             reported_fps = 0.0
             if hasattr(cv2_module, "CAP_PROP_FPS"):
-                property_reader = cast(CapturePropertyReader, capture)
-                reported_fps = float(property_reader.get(cv2_module.CAP_PROP_FPS))
+                reported_fps = float(capture.get(cv2_module.CAP_PROP_FPS))  # type: ignore[attr-defined]
 
             results.append(
                 ProbeResult(

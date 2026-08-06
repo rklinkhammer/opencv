@@ -1,11 +1,4 @@
-"""Bounded asynchronous image writer.
-
-Architecture:
-- The writer owns a single bounded queue and one worker thread.
-- Capture code submits `FrameRecord` instances and never writes files directly.
-- The worker applies overlay/exif policies, commits via atomic output
-    transactions, and records first failure for cooperative shutdown.
-"""
+"""Write captured frames on a background thread."""
 
 from __future__ import annotations
 
@@ -30,22 +23,12 @@ _QUEUE_PUT_TIMEOUT_SECONDS = 0.05
 
 @dataclass(frozen=True)
 class WriterCloseResult:
-    """Outcome of writer shutdown coordination.
-
-    Attributes:
-    - mode: `normal`, `writer-error`, or `timeout`.
-    - thread_alive: whether the worker thread was still running after join.
-    - pending_items: queue items remaining after shutdown.
-    """
-
     mode: str
     thread_alive: bool
     pending_items: int
 
 
 class WriterState(Enum):
-    """Explicit lifecycle states for the asynchronous frame writer."""
-
     NEW = "new"
     RUNNING = "running"
     STOPPING = "stopping"
@@ -54,8 +37,6 @@ class WriterState(Enum):
 
 
 def write_exif_timestamp(image_path: Path, capture_time: float) -> None:
-    """Insert timestamp EXIF fields without re-encoding JPEG pixels."""
-
     try:
         import piexif
     except ImportError as exc:
@@ -83,8 +64,6 @@ def write_exif_timestamp(image_path: Path, capture_time: float) -> None:
 
 
 class AsyncFrameWriter:
-    """Own one writer thread, its bounded queue, and first failure."""
-
     def __init__(
         self,
         *,
@@ -95,8 +74,6 @@ class AsyncFrameWriter:
         exif_writer: Callable[[Path, float], None] = write_exif_timestamp,
         shutdown_monotonic: Callable[[], float] = time.perf_counter,
     ) -> None:
-        """Initialize queue, failure signaling, and writer-thread state."""
-
         self._config = config
         self._cv2 = cv2_module
         self._extension = extension
@@ -106,7 +83,6 @@ class AsyncFrameWriter:
         self._queue: Queue[FrameRecord | None] = Queue(config.write_queue_size)
         self._state_lock = Lock()
         self._submit_lock = Lock()
-        self._close_lock = Lock()
         self._state = WriterState.NEW
         self._error: Exception | None = None
         self._stop_requested = False
@@ -121,14 +97,10 @@ class AsyncFrameWriter:
 
     @property
     def state(self) -> WriterState:
-        """Return a synchronized snapshot of the writer lifecycle state."""
-
         with self._state_lock:
             return self._state
 
     def start(self) -> None:
-        """Transition from `NEW` to `RUNNING` and start the worker thread."""
-
         with self._state_lock:
             if self._state is not WriterState.NEW:
                 raise WriterError(f"Writer cannot start while state is {self._state.value}")
@@ -143,8 +115,6 @@ class AsyncFrameWriter:
                 raise error from exc
 
     def _set_error(self, error: Exception) -> None:
-        """Record the first writer error and transition to failed state."""
-
         with self._state_lock:
             if self._error is None:
                 self._error = error
@@ -152,31 +122,12 @@ class AsyncFrameWriter:
                 self._state = WriterState.FAILED
 
     def raise_if_failed(self) -> None:
-        """Raise the first writer failure if one has occurred."""
-
         with self._state_lock:
             error = self._error
         if error is not None:
             raise error
 
-    def _ensure_accepting_locked(self) -> None:
-        """Validate submission state while the caller holds the state lock."""
-
-        if self._error is not None:
-            raise self._error
-        if self._state is not WriterState.RUNNING:
-            raise WriterError(f"Writer cannot accept frames while state is {self._state.value}")
-
-    def _mark_stopped(self) -> None:
-        """Record normal worker termination without overwriting a failure."""
-
-        with self._state_lock:
-            if self._state is not WriterState.FAILED:
-                self._state = WriterState.STOPPED
-
     def _save(self, frame: FrameRecord) -> Path:
-        """Persist a single frame and return the committed output path."""
-
         image = frame.image
         if self._config.overlay_timestamp:
             timestamp = format_iso_timestamp(frame.captured_at)
@@ -204,8 +155,6 @@ class AsyncFrameWriter:
             return output.commit()
 
     def _run(self) -> None:
-        """Consume queued frames until sentinel or unrecoverable write failure."""
-
         while True:
             try:
                 frame = self._queue.get(timeout=_QUEUE_GET_TIMEOUT_SECONDS)
@@ -213,7 +162,9 @@ class AsyncFrameWriter:
                 continue
             try:
                 if frame is None:
-                    self._mark_stopped()
+                    with self._state_lock:
+                        if self._state is not WriterState.FAILED:
+                            self._state = WriterState.STOPPED
                     return
                 path = self._save(frame)
                 self.saved_images.append(path)
@@ -233,11 +184,6 @@ class AsyncFrameWriter:
         deadline: float,
         monotonic: Callable[[], float],
     ) -> bool:
-        """Submit a frame before deadline, respecting queue backpressure.
-
-        Returns `True` when enqueued, `False` when deadline expires first.
-        """
-
         if self._submit_once(frame, timeout=None):
             return True
 
@@ -247,11 +193,14 @@ class AsyncFrameWriter:
         return False
 
     def _submit_once(self, frame: FrameRecord, *, timeout: float | None) -> bool:
-        """Attempt one ordered queue insertion without blocking the state lock."""
-
         with self._submit_lock:
             with self._state_lock:
-                self._ensure_accepting_locked()
+                if self._error is not None:
+                    raise self._error
+                if self._state is not WriterState.RUNNING:
+                    raise WriterError(
+                        f"Writer cannot accept frames while state is {self._state.value}"
+                    )
             try:
                 if timeout is None:
                     self._queue.put_nowait(frame)
@@ -267,14 +216,10 @@ class AsyncFrameWriter:
 
     @property
     def queue_full_events(self) -> int:
-        """Return the number of bounded-queue backpressure events observed."""
-
         with self._state_lock:
             return self._queue_full_events
 
     def snapshot_metrics(self, close_result: WriterCloseResult) -> WriterMetrics:
-        """Return immutable writer metrics associated with a close result."""
-
         with self._state_lock:
             return WriterMetrics(
                 frames_submitted=self._frames_submitted,
@@ -285,23 +230,20 @@ class AsyncFrameWriter:
             )
 
     def close(self, *, timeout: float = 5.0) -> WriterCloseResult:
-        """Signal writer termination and return shutdown telemetry."""
-
-        with self._close_lock:
-            with self._submit_lock:
-                with self._state_lock:
-                    if self._close_result is not None:
-                        return self._close_result
-                    if self._state is WriterState.NEW:
-                        self._state = WriterState.STOPPED
-                        result = WriterCloseResult(
-                            mode="normal", thread_alive=False, pending_items=self._queue.qsize()
-                        )
-                        self._close_result = result
-                        return result
-                    if self._state is WriterState.RUNNING:
-                        self._state = WriterState.STOPPING
-                    thread_started = self._thread_started
+        with self._submit_lock:
+            with self._state_lock:
+                if self._close_result is not None:
+                    return self._close_result
+                if self._state is WriterState.NEW:
+                    self._state = WriterState.STOPPED
+                    result = WriterCloseResult(
+                        mode="normal", thread_alive=False, pending_items=self._queue.qsize()
+                    )
+                    self._close_result = result
+                    return result
+                if self._state is WriterState.RUNNING:
+                    self._state = WriterState.STOPPING
+                thread_started = self._thread_started
 
             deadline = self._shutdown_monotonic() + max(0.0, timeout)
             self._request_stop(deadline)
@@ -324,8 +266,6 @@ class AsyncFrameWriter:
                 return result
 
     def _request_stop(self, deadline: float) -> None:
-        """Enqueue the stop sentinel, draining abandoned work after failure."""
-
         while self._thread.is_alive() and self._shutdown_monotonic() < deadline:
             with self._state_lock:
                 if self._stop_requested:

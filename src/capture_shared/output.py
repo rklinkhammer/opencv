@@ -11,8 +11,6 @@ from capture_shared.errors import OutputError
 
 
 def reserve_unique_path(output_dir: Path, file_stem: str, extension: str) -> Path:
-    """Atomically reserve a collision-free output path."""
-
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -32,24 +30,16 @@ def reserve_unique_path(output_dir: Path, file_stem: str, extension: str) -> Pat
 
 
 def temporary_peer_path(output_path: Path) -> Path:
-    """Return a unique temporary neighbor retaining the destination extension."""
-
     return output_path.with_name(f".{output_path.stem}.{uuid4().hex}.tmp{output_path.suffix}")
 
 
 class OutputTransaction:
-    """Reserve a unique destination and atomically publish a temporary peer."""
-
     def __init__(self, output_dir: Path, file_stem: str, extension: str) -> None:
-        """Reserve a destination and derive its unique temporary peer path."""
-
         self.destination = reserve_unique_path(output_dir, file_stem, extension)
         self.temporary = temporary_peer_path(self.destination)
         self._committed = False
 
     def commit(self) -> Path:
-        """Atomically replace the reservation with the completed temporary file."""
-
         try:
             os.replace(self.temporary, self.destination)
         except OSError as exc:
@@ -58,26 +48,18 @@ class OutputTransaction:
         return self.destination
 
     def close(self) -> None:
-        """Remove temporary data and any uncommitted destination reservation."""
-
         self.temporary.unlink(missing_ok=True)
         if not self._committed:
             self.destination.unlink(missing_ok=True)
 
     def __enter__(self) -> OutputTransaction:
-        """Return this transaction for context-managed output construction."""
-
         return self
 
     def __exit__(self, exc_type, exc, traceback) -> None:
-        """Clean up temporary or uncommitted paths when the context exits."""
-
         self.close()
 
 
 def recover_stale_outputs(output_dir: Path, *, older_than_seconds: float = 3600.0) -> int:
-    """Remove stale temporary peers and empty reservations from interrupted runs."""
-
     if not output_dir.exists():
         return 0
     cutoff = time.time() - older_than_seconds
@@ -98,8 +80,6 @@ def recover_stale_outputs(output_dir: Path, *, older_than_seconds: float = 3600.
 
 
 def write_unique_text(output_dir: Path, file_stem: str, extension: str, content: str) -> Path:
-    """Create a uniquely named text file without overwriting existing output."""
-
     output_path = reserve_unique_path(output_dir, file_stem, extension)
     try:
         output_path.write_text(content, encoding="utf-8")

@@ -1,11 +1,4 @@
-"""Unified parallel launcher for camera capture and GPIO edge logging.
-
-Architecture:
-- Parses and validates user intent at the CLI boundary.
-- Delegates execution to `capture_shared.parallel_service` (no worker logic in
-    this module).
-- Owns user-facing formatting of success/failure summaries.
-"""
+"""Unified camera and GPIO command line interface."""
 
 from __future__ import annotations
 
@@ -16,21 +9,16 @@ from capture_shared.capture_cli import add_common_camera_args
 from capture_shared.capture_cli import build_capture_config
 from capture_shared.errors import ConfigurationError
 from capture_shared.parallel_service import GpioJob
-from capture_shared.parallel_service import ParallelOutcome
 from capture_shared.parallel_service import execute_parallel_capture
 from camera_capture.capture import capture_images
 from gpio_capture.gpio_edge import run_gpio_edge_logger
 
 
 def _format_exception(exc: Exception) -> str:
-    """Render exceptions consistently for user-facing CLI output."""
-
     return f"{type(exc).__name__}: {exc}"
 
 
 def _parse_gpio_spec(spec: str) -> GpioJob:
-    """Parse gpio spec in format chip:line:tag[:edge]."""
-
     parts = [part.strip() for part in spec.split(":")]
     if len(parts) not in {3, 4}:
         raise ConfigurationError(
@@ -63,15 +51,7 @@ def _parse_gpio_spec(spec: str) -> GpioJob:
     return GpioJob(chip=chip, line_offset=line_offset, tag=tag, edge=edge)
 
 
-def _worker_label(spec: GpioJob) -> str:
-    """Build a stable human-readable worker label."""
-
-    return f"{spec.chip}:{spec.line_offset}:{spec.tag}"
-
-
 def build_parser() -> argparse.ArgumentParser:
-    """Build and return parser for unified parallel capture launcher."""
-
     parser = argparse.ArgumentParser(
         prog="capture-main",
         description=(
@@ -125,46 +105,33 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _validate_runtime_args(args: argparse.Namespace) -> str | None:
-    """Validate scalar runtime options and return a user-facing error string."""
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
 
     if args.duration <= 0:
-        return "Error: --duration must be > 0"
+        print("Error: --duration must be > 0")
+        return 1
     if args.gpio_poll_timeout_ms <= 0:
-        return "Error: --gpio-poll-timeout-ms must be > 0"
-    return None
+        print("Error: --gpio-poll-timeout-ms must be > 0")
+        return 1
 
+    try:
+        gpio_specs = [_parse_gpio_spec(spec) for spec in args.gpio]
+    except ConfigurationError as exc:
+        print(f"Error: {_format_exception(exc)}")
+        return 1
 
-def _parse_gpio_specs(gpio_args: list[str]) -> list[GpioJob]:
-    """Parse all repeated GPIO CLI specs into normalized `GpioJob` values."""
-
-    return [_parse_gpio_spec(spec) for spec in gpio_args]
-
-
-def _validate_gpio_requirements(
-    *,
-    gpio_specs: list[GpioJob],
-    gpio_output_dir: Path | None,
-) -> str | None:
-    """Validate GPIO-specific CLI constraints.
-
-    Ensures output directory requirements and tag uniqueness before dispatch.
-    """
-
-    if gpio_specs and gpio_output_dir is None:
-        return "Error: --gpio-output-dir is required when one or more --gpio specs are provided"
+    if gpio_specs and args.gpio_output_dir is None:
+        print("Error: --gpio-output-dir is required when one or more --gpio specs are provided")
+        return 1
 
     seen_tags: set[str] = set()
     for spec in gpio_specs:
         normalized = spec.tag.strip().lower()
         if normalized in seen_tags:
-            return f"Error: duplicate GPIO tag detected: {spec.tag}"
+            print(f"Error: duplicate GPIO tag detected: {spec.tag}")
+            return 1
         seen_tags.add(normalized)
-    return None
-
-
-def _print_run_header(args: argparse.Namespace, gpio_specs: list[GpioJob]) -> None:
-    """Emit startup summary lines before orchestrating worker execution."""
 
     print(
         "Starting parallel capture run: "
@@ -172,86 +139,7 @@ def _print_run_header(args: argparse.Namespace, gpio_specs: list[GpioJob]) -> No
         f"camera_backend={args.capture_backend}"
     )
     for spec in gpio_specs:
-        print(f"- GPIO worker {_worker_label(spec)} edge={spec.edge}")
-
-
-def _print_run_summary(*, result: ParallelOutcome) -> int:
-    """Render final run summary and return process exit code."""
-
-    for line in _render_run_summary_lines(result):
-        print(line)
-    return 1 if _run_failed(result) else 0
-
-
-def _run_failed(result: ParallelOutcome) -> bool:
-    """Return whether camera or any GPIO worker reported an error."""
-
-    return result.camera_error is not None or any(
-        worker.error is not None for worker in result.workers
-    )
-
-
-def _render_run_summary_lines(result: ParallelOutcome) -> list[str]:
-    """Build deterministic, operator-readable summary lines for a run."""
-
-    lines: list[str] = []
-    if result.camera_error is not None:
-        lines.append(f"Error: camera capture failed: {_format_exception(result.camera_error)}")
-    else:
-        lines.append(f"Saved {len(result.images)} image(s) to {result.camera_output_dir}")
-
-    for worker in result.workers:
-        if worker.error is not None:
-            lines.append(
-                f"Error: GPIO worker {worker.key} failed: {_format_exception(worker.error)}"
-            )
-        else:
-            lines.append(
-                f"GPIO worker {worker.key} completed with {len(worker.files)} value file(s)"
-            )
-
-    total_gpio_files = sum(len(worker.files) for worker in result.workers)
-    failed = _run_failed(result)
-    lines.append(f"Total GPIO value files: {total_gpio_files}")
-    lines.append(
-        "Parallel capture run complete: "
-        f"status={'FAILED' if failed else 'OK'} elapsed_s={result.elapsed_seconds:.2f}"
-    )
-    return lines
-
-
-def main(argv: list[str] | None = None) -> int:
-    """Run camera and GPIO capture workflows in parallel.
-
-    Execution flow:
-    1. Parse/validate CLI arguments.
-    2. Build camera runtime config and GPIO job set.
-    3. Delegate orchestration to `execute_parallel_capture`.
-    4. Render outcome lines and return a shell-friendly exit code.
-    """
-
-    args = build_parser().parse_args(argv)
-
-    runtime_error = _validate_runtime_args(args)
-    if runtime_error is not None:
-        print(runtime_error)
-        return 1
-
-    try:
-        gpio_specs = _parse_gpio_specs(args.gpio)
-    except ConfigurationError as exc:
-        print(f"Error: {_format_exception(exc)}")
-        return 1
-
-    gpio_error = _validate_gpio_requirements(
-        gpio_specs=gpio_specs,
-        gpio_output_dir=args.gpio_output_dir,
-    )
-    if gpio_error is not None:
-        print(gpio_error)
-        return 1
-
-    _print_run_header(args, gpio_specs)
+        print(f"- GPIO worker {spec.key} edge={spec.edge}")
 
     camera_config = build_capture_config(
         args=args,
@@ -269,7 +157,26 @@ def main(argv: list[str] | None = None) -> int:
         capture_fn=capture_images,
         gpio_fn=run_gpio_edge_logger,
     )
-    return _print_run_summary(result=outcome)
+    if outcome.camera_error is not None:
+        print(f"Error: camera capture failed: {_format_exception(outcome.camera_error)}")
+    else:
+        print(f"Saved {len(outcome.images)} image(s) to {outcome.camera_output_dir}")
+
+    for worker in outcome.workers:
+        if worker.error is not None:
+            print(f"Error: GPIO worker {worker.key} failed: {_format_exception(worker.error)}")
+        else:
+            print(f"GPIO worker {worker.key} completed with {len(worker.files)} value file(s)")
+
+    failed = outcome.camera_error is not None or any(
+        worker.error is not None for worker in outcome.workers
+    )
+    print(f"Total GPIO value files: {sum(len(worker.files) for worker in outcome.workers)}")
+    print(
+        "Parallel capture run complete: "
+        f"status={'FAILED' if failed else 'OK'} elapsed_s={outcome.elapsed_seconds:.2f}"
+    )
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

@@ -1,18 +1,10 @@
-"""Presentation-free orchestration for parallel camera and GPIO capture.
-
-Architecture:
-- Accepts pure callables for camera and GPIO execution so orchestration stays
-    transport-agnostic and test-friendly.
-- Owns thread lifecycle and cooperative stop coordination for GPIO workers.
-- Returns structured outcomes; presentation and CLI formatting are handled by
-    callers.
-"""
+"""Run camera and GPIO capture together."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from threading import Event, Lock, Thread
+from threading import Event, Thread
 import time
 from typing import Callable
 
@@ -25,8 +17,6 @@ _GPIO_JOIN_GRACE_SECONDS = 1.0
 
 @dataclass(frozen=True)
 class GpioJob:
-    """Declarative GPIO worker request produced by CLI parsing."""
-
     chip: str
     line_offset: int
     tag: str
@@ -34,15 +24,11 @@ class GpioJob:
 
     @property
     def key(self) -> str:
-        """Stable worker identifier used in summaries and result mapping."""
-
         return f"{self.chip}:{self.line_offset}:{self.tag}"
 
 
 @dataclass(frozen=True)
 class WorkerOutcome:
-    """Result payload for one GPIO worker."""
-
     key: str
     files: tuple[Path, ...] = ()
     error: Exception | None = None
@@ -50,8 +36,6 @@ class WorkerOutcome:
 
 @dataclass(frozen=True)
 class ParallelOutcome:
-    """Aggregate outcome returned by the parallel orchestration service."""
-
     camera_output_dir: Path
     images: tuple[Path, ...]
     camera_error: Exception | None
@@ -69,23 +53,11 @@ def execute_parallel_capture(
     capture_fn: Callable[[CaptureConfig], list[Path]],
     gpio_fn: Callable[..., list[Path]],
 ) -> ParallelOutcome:
-    """Execute all workers and return structured results without printing.
-
-    Execution flow:
-    1. Start GPIO worker threads.
-    2. Run camera capture on the calling thread.
-    3. Signal cooperative stop and join workers.
-    4. Normalize worker outcomes for presentation-layer consumers.
-    """
-
     started = time.perf_counter()
     stop_event = Event()
-    raw_results: dict[str, list[Path] | Exception] = {}
-    results_lock = Lock()
+    results: list[list[Path] | Exception | None] = [None] * len(gpio_jobs)
 
-    def run_gpio(job: GpioJob) -> None:
-        """Execute one GPIO job and capture either its paths or raised exception."""
-
+    def run_gpio(index: int, job: GpioJob) -> None:
         config = GpioEdgeConfig(
             output_dir=gpio_output_dir,  # type: ignore[arg-type]
             chip_name=job.chip,
@@ -96,20 +68,18 @@ def execute_parallel_capture(
             poll_timeout_ms=gpio_poll_timeout_ms,
         )
         try:
-            result: list[Path] | Exception = gpio_fn(config, stop_event=stop_event)
+            results[index] = gpio_fn(config, stop_event=stop_event)
         except Exception as exc:
-            result = exc
-        with results_lock:
-            raw_results[job.key] = result
+            results[index] = exc
 
     threads = [
         Thread(
             target=run_gpio,
-            args=(job,),
+            args=(index, job),
             name=f"gpio-edge-{job.tag}-{job.line_offset}",
             daemon=True,
         )
-        for job in gpio_jobs
+        for index, job in enumerate(gpio_jobs)
     ]
     for thread in threads:
         thread.start()
@@ -125,11 +95,8 @@ def execute_parallel_capture(
         for thread in threads:
             thread.join(timeout=(gpio_poll_timeout_ms / 1000.0) + _GPIO_JOIN_GRACE_SECONDS)
 
-    with results_lock:
-        snapshot = dict(raw_results)
     outcomes: list[WorkerOutcome] = []
-    for job, thread in zip(gpio_jobs, threads):
-        raw = snapshot.get(job.key)
+    for job, thread, raw in zip(gpio_jobs, threads, results):
         if thread.is_alive():
             raw = ParallelExecutionError("worker did not stop before the join timeout")
         elif raw is None:

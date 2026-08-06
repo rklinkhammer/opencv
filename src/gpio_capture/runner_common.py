@@ -6,37 +6,21 @@ from typing import Any, Protocol
 
 from capture_shared.clocks import Clock
 from capture_shared.output import recover_stale_outputs
+from capture_shared.runtime import should_stop
 
-from .core import should_stop_loop, write_value_file
+from .core import write_value_file
 from .models import GpioMetrics, GpioRunResult
 
 
 class EdgeSource(Protocol):
-    """Adapter contract for version-specific GPIO event sources.
+    def read_value(self) -> int: ...
 
-    Runner implementations provide this interface so shared loop logic can stay
-    independent from libgpiod version details.
-    """
+    def wait_event(self, timeout_seconds: float) -> Any | None: ...
 
-    def read_value(self) -> int:
-        """Read and normalize the current logical GPIO line value."""
-
-        ...
-
-    def wait_event(self, timeout_seconds: float) -> Any | None:
-        """Wait up to the timeout and return one backend event when available."""
-
-        ...
-
-    def event_time(self, event: Any, clock: Clock) -> float:
-        """Return a wall-clock timestamp safe for artifact naming."""
-
-        ...
+    def event_time(self, event: Any, clock: Clock) -> float: ...
 
 
 def run_event_logger(config, *, source: EdgeSource, clock: Clock, stop_event) -> GpioRunResult:
-    """Write GPIO states and return paths with version-neutral metrics."""
-
     written = []
     recover_stale_outputs(config.output_dir)
     event_count = 0
@@ -65,12 +49,11 @@ def run_event_logger(config, *, source: EdgeSource, clock: Clock, stop_event) ->
 
     while True:
         last_time = clock.monotonic()
-        if should_stop_loop(
+        if should_stop(
             start_time=start_time,
-            config=config,
+            duration_seconds=config.duration_seconds,
             stop_event=stop_event,
-            clock=clock,
-            current_time=last_time,
+            time_provider=lambda: last_time,
         ):
             break
         event = source.wait_event(config.poll_timeout_ms / 1000.0)

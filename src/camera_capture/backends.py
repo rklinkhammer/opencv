@@ -15,41 +15,22 @@ _GSTREAMER_SAMPLE_TIMEOUT_MILLISECONDS = 100
 
 
 class CaptureHandle(Protocol):
-    """Minimal camera handle shared by backend and session boundaries."""
+    def isOpened(self) -> bool: ...
 
-    def isOpened(self) -> bool:
-        """Return whether the underlying capture resource opened successfully."""
+    def read(self) -> tuple[bool, Any]: ...
 
-        ...
-
-    def read(self) -> tuple[bool, Any]:
-        """Return a success flag and the next frame payload."""
-
-        ...
-
-    def release(self) -> None:
-        """Release hardware or pipeline resources owned by the handle."""
-
-        ...
+    def release(self) -> None: ...
 
 
 class CaptureBackend(Protocol):
-    """Backend boundary for opening and configuring capture handles."""
-
-    def open(self, config: CaptureConfig, cv2_module: Any) -> CaptureHandle:
-        """Open and return a capture handle for the supplied configuration."""
-
-        ...
+    def open(self, config: CaptureConfig, cv2_module: Any) -> CaptureHandle: ...
 
     def configure(
         self,
         capture: CaptureHandle,
         config: CaptureConfig,
         cv2_module: Any,
-    ) -> None:
-        """Apply backend-specific configuration to an opened handle."""
-
-        ...
+    ) -> None: ...
 
 
 def apply_camera_settings(
@@ -57,48 +38,19 @@ def apply_camera_settings(
     config: CaptureConfig,
     cv2_module: Any,
 ) -> None:
-    """Apply optional camera controls to an OpenCV capture object."""
-
-    property_mappings: list[tuple[str, float | None, bool]] = [
-        ("CAP_PROP_FPS", float(config.fps), True),
-        (
-            "CAP_PROP_FRAME_WIDTH",
-            float(config.frame_width) if config.frame_width is not None else None,
-            config.frame_width is not None,
-        ),
-        (
-            "CAP_PROP_FRAME_HEIGHT",
-            float(config.frame_height) if config.frame_height is not None else None,
-            config.frame_height is not None,
-        ),
-        (
-            "CAP_PROP_AUTO_EXPOSURE",
-            float(config.auto_exposure) if config.auto_exposure is not None else None,
-            config.auto_exposure is not None,
-        ),
-        (
-            "CAP_PROP_EXPOSURE",
-            float(config.exposure) if config.exposure is not None else None,
-            config.exposure is not None,
-        ),
-        (
-            "CAP_PROP_GAIN",
-            float(config.gain) if config.gain is not None else None,
-            config.gain is not None,
-        ),
-        (
-            "CAP_PROP_BRIGHTNESS",
-            float(config.brightness) if config.brightness is not None else None,
-            config.brightness is not None,
-        ),
+    settings = [
+        ("CAP_PROP_FPS", config.fps),
+        ("CAP_PROP_FRAME_WIDTH", config.frame_width),
+        ("CAP_PROP_FRAME_HEIGHT", config.frame_height),
+        ("CAP_PROP_AUTO_EXPOSURE", config.auto_exposure),
+        ("CAP_PROP_EXPOSURE", config.exposure),
+        ("CAP_PROP_GAIN", config.gain),
+        ("CAP_PROP_BRIGHTNESS", config.brightness),
     ]
 
-    for prop_name, value, enabled in property_mappings:
-        if not enabled or value is None:
-            continue
-        if not hasattr(cv2_module, prop_name):
-            continue
-        capture.set(getattr(cv2_module, prop_name), float(value))
+    for name, value in settings:
+        if value is not None and hasattr(cv2_module, name):
+            capture.set(getattr(cv2_module, name), float(value))
 
     if (
         config.fourcc
@@ -111,8 +63,6 @@ def apply_camera_settings(
 
 
 def build_gstreamer_pipeline(config: CaptureConfig) -> str:
-    """Build a GStreamer pipeline string from source presets and config."""
-
     if config.gstreamer_pipeline:
         return config.gstreamer_pipeline
 
@@ -151,11 +101,7 @@ def build_gstreamer_pipeline(config: CaptureConfig) -> str:
 
 
 class NativeGStreamerCapture:
-    """Thin capture wrapper around a native GStreamer appsink pipeline."""
-
     def __init__(self, config: CaptureConfig):
-        """Initialize pipeline, resolve appsink, and move to PLAYING state."""
-
         try:
             import gi
 
@@ -192,13 +138,9 @@ class NativeGStreamerCapture:
             self._opened = True
 
     def isOpened(self) -> bool:
-        """Return whether the capture backend initialized successfully."""
-
         return self._opened
 
     def read(self) -> tuple[bool, Any]:
-        """Read one BGR frame from appsink and return success flag + frame."""
-
         if not self._opened:
             return False, None
 
@@ -244,18 +186,12 @@ class NativeGStreamerCapture:
             buffer.unmap(mapped)
 
     def release(self) -> None:
-        """Release GStreamer resources and set pipeline state to NULL."""
-
         self._pipeline.set_state(self._Gst.State.NULL)
         self._opened = False
 
 
 class OpenCvBackend:
-    """Open and configure captures through the injected OpenCV module."""
-
     def open(self, config: CaptureConfig, cv2_module: Any) -> CaptureHandle:
-        """Open an OpenCV capture for the configured camera index."""
-
         return cv2_module.VideoCapture(config.camera_index)
 
     def configure(
@@ -264,17 +200,11 @@ class OpenCvBackend:
         config: CaptureConfig,
         cv2_module: Any,
     ) -> None:
-        """Apply validated optional capture properties through OpenCV constants."""
-
         apply_camera_settings(capture, config, cv2_module)
 
 
 class NativeGStreamerBackend:
-    """Open native GStreamer captures whose pipeline owns configuration."""
-
     def open(self, config: CaptureConfig, cv2_module: Any) -> CaptureHandle:
-        """Construct a native GStreamer appsink capture."""
-
         del cv2_module
         return NativeGStreamerCapture(config)
 
@@ -284,14 +214,10 @@ class NativeGStreamerBackend:
         config: CaptureConfig,
         cv2_module: Any,
     ) -> None:
-        """Perform no extra setup because configuration is in the pipeline."""
-
         del capture, config, cv2_module
 
 
 def create_capture_backend(name: str) -> CaptureBackend:
-    """Return the backend implementation for a normalized public backend name."""
-
     backend = normalize_backend(name)
     if backend == "opencv":
         return OpenCvBackend()
@@ -299,11 +225,5 @@ def create_capture_backend(name: str) -> CaptureBackend:
 
 
 def open_capture(config: CaptureConfig, cv2_module: Any) -> CaptureHandle:
-    """Open a capture handle through the selected backend.
-
-    This compatibility helper preserves the original public function while new
-    orchestration code uses `create_capture_backend()` and `CameraSession`.
-    """
-
     backend = create_capture_backend(config.capture_backend)
     return backend.open(config, cv2_module)

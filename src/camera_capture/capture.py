@@ -1,12 +1,4 @@
-"""Camera capture orchestration built from session, clock, and writer services.
-
-Architecture:
-- `CameraSession` owns backend open/configure/release semantics.
-- `Clock` separates wall-time stamping from monotonic deadline control.
-- `AsyncFrameWriter` decouples frame ingestion from disk IO and EXIF writes.
-- This module coordinates those components into one linear capture lifecycle:
-    prepare -> warmup -> enqueue -> close writer -> surface failures.
-"""
+"""Camera capture loop."""
 
 from __future__ import annotations
 
@@ -22,7 +14,7 @@ from capture_shared.output import recover_stale_outputs
 
 from . import backends
 from .models import CaptureConfig, CaptureMetrics, CaptureResult, FrameRecord, WriterMetrics
-from .pipeline import FrameTransform, IdentityFrameTransform
+from .pipeline import FrameTransform
 from .probe import probe_camera_modes as probe_camera_modes
 from .session import CameraSession, CaptureHandle
 from .validators import validate_capture_config
@@ -32,12 +24,6 @@ _READ_RETRY_SECONDS = 0.01
 
 
 def _create_logger(log_file: Path | None) -> logging.Logger:
-    """Create a run-scoped logger that never propagates to the root logger.
-
-    The capture pipeline uses a unique logger per invocation so concurrent runs
-    do not share handlers or duplicate records.
-    """
-
     logger = logging.getLogger(f"camera_capture.run.{uuid4().hex}")
     logger.setLevel(logging.INFO)
     logger.propagate = False
@@ -51,20 +37,12 @@ def _create_logger(log_file: Path | None) -> logging.Logger:
 
 
 def _close_logger(logger: logging.Logger) -> None:
-    """Detach and close all handlers associated with a run logger."""
-
     for handler in list(logger.handlers):
         logger.removeHandler(handler)
         handler.close()
 
 
 def _warmup(capture: CaptureHandle, frames: int, sleep: Callable[[float], None]) -> int:
-    """Read and discard startup frames before normal capture begins.
-
-    Returns the number of successful warmup frames observed within a bounded
-    retry window.
-    """
-
     successful = 0
     for _ in range(max(frames * 20, 20)):
         if successful >= frames:
@@ -77,49 +55,42 @@ def _warmup(capture: CaptureHandle, frames: int, sleep: Callable[[float], None])
     return successful
 
 
-def _log_close(
+def _log_summary(
     logger: logging.Logger,
-    result: WriterCloseResult,
-    enqueued: int,
-    saved: int,
+    close: WriterCloseResult,
+    capture: CaptureMetrics,
+    writer: WriterMetrics,
 ) -> None:
-    """Emit end-of-run telemetry for queue drain and writer shutdown status."""
-
-    logger.info("Capture completed: enqueued=%d saved_images=%d", enqueued, saved)
+    logger.info(
+        "Capture completed: enqueued=%d saved_images=%d",
+        capture.frames_enqueued,
+        capture.frames_saved,
+    )
     logger.info(
         "Writer shutdown: mode=%s pending=%d alive=%s",
-        result.mode,
-        result.pending_items,
-        result.thread_alive,
+        close.mode,
+        close.pending_items,
+        close.thread_alive,
     )
-
-
-def _log_metrics(
-    logger: logging.Logger,
-    capture_metrics: CaptureMetrics,
-    writer_metrics: WriterMetrics,
-) -> None:
-    """Emit structured end-of-run counters without changing CLI presentation."""
-
     logger.info(
         "Capture metrics: read=%d enqueued=%d saved=%d read_failures=%d "
         "warmup=%d/%d queue_full=%d elapsed_s=%.6f",
-        capture_metrics.frames_read,
-        capture_metrics.frames_enqueued,
-        capture_metrics.frames_saved,
-        capture_metrics.read_failures,
-        capture_metrics.warmup_completed,
-        capture_metrics.warmup_requested,
-        capture_metrics.queue_full_events,
-        capture_metrics.elapsed_seconds,
+        capture.frames_read,
+        capture.frames_enqueued,
+        capture.frames_saved,
+        capture.read_failures,
+        capture.warmup_completed,
+        capture.warmup_requested,
+        capture.queue_full_events,
+        capture.elapsed_seconds,
     )
     logger.info(
         "Writer metrics: submitted=%d written=%d failures=%d close_mode=%s pending=%d",
-        writer_metrics.frames_submitted,
-        writer_metrics.frames_written,
-        writer_metrics.write_failures,
-        writer_metrics.close_mode,
-        writer_metrics.pending_items_at_close,
+        writer.frames_submitted,
+        writer.frames_written,
+        writer.write_failures,
+        writer.close_mode,
+        writer.pending_items_at_close,
     )
 
 
@@ -132,8 +103,6 @@ def capture_images(
     cv2_module: object | None = None,
     frame_transform: FrameTransform | None = None,
 ) -> list[Path]:
-    """Capture images for a fixed duration and return durable output paths."""
-
     result = capture_images_with_result(
         config,
         clock=clock,
@@ -154,22 +123,11 @@ def capture_images_with_result(
     cv2_module: object | None = None,
     frame_transform: FrameTransform | None = None,
 ) -> CaptureResult:
-    """Capture images and return durable paths with structured runtime metrics.
-
-    Execution flow:
-    1. Validate config and initialize runtime dependencies.
-    2. Open/configure a camera session.
-    3. Warm up camera reads to skip startup instability.
-    4. Apply the injected frame transform and enqueue records until deadline.
-    5. Close writer, surface writer/session failures, return committed files.
-    """
-
     backend, extension = validate_capture_config(config)
     if cv2_module is None:
         import cv2 as cv2_module  # type: ignore[no-redef]
 
     active_clock = clock or SystemClock()
-    active_transform = frame_transform if frame_transform is not None else IdentityFrameTransform()
     logger = _create_logger(config.log_file)
     writer: AsyncFrameWriter | None = None
     close_result: WriterCloseResult | None = None
@@ -222,7 +180,8 @@ def capture_images_with_result(
                 frames_read += 1
                 captured_at = active_clock.wall_time()
                 record = FrameRecord(sequence=sequence, captured_at=captured_at, image=image)
-                record = active_transform.apply(record)
+                if frame_transform is not None:
+                    record = frame_transform.apply(record)
                 if not writer.submit(record, deadline=end, monotonic=active_clock.monotonic):
                     break
                 sequence += 1
@@ -230,7 +189,6 @@ def capture_images_with_result(
     finally:
         if writer is not None:
             close_result = writer.close()
-            _log_close(logger, close_result, enqueued, len(writer.saved_images))
             capture_metrics = CaptureMetrics(
                 frames_read=frames_read,
                 frames_enqueued=enqueued,
@@ -242,7 +200,7 @@ def capture_images_with_result(
                 elapsed_seconds=max(0.0, last_loop_time - capture_started),
             )
             writer_metrics = writer.snapshot_metrics(close_result)
-            _log_metrics(logger, capture_metrics, writer_metrics)
+            _log_summary(logger, close_result, capture_metrics, writer_metrics)
         _close_logger(logger)
 
     assert writer is not None and close_result is not None

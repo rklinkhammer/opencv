@@ -2,36 +2,36 @@
 
 
 class CaptureSystemError(Exception):
-    """Base class for known camera/GPIO capture package failures."""
+    pass
 
 
 class ConfigurationError(CaptureSystemError):
-    """Raised when package configuration is invalid."""
+    pass
 
 
 class BackendError(CaptureSystemError):
-    """Raised when a capture backend cannot be initialized."""
+    pass
 
 
 class CameraOpenError(BackendError):
-    """Raised when a configured camera handle cannot be opened."""
+    pass
 
 
 class WriterError(CaptureSystemError):
-    """Raised when an image writer cannot persist a frame."""
+    pass
 
 
 class WriterTimeoutError(WriterError):
-    """Raised when a writer cannot stop before its shutdown deadline."""
+    pass
 
 
 class OutputError(CaptureSystemError):
-    """Raised when capture output cannot be reserved or committed."""
+    pass
 
 
 class GpioError(CaptureSystemError):
-    """Raised when GPIO bindings, chips, lines, or requests cannot be set up."""
+    pass
 
 
 class ParallelExecutionError(CaptureSystemError):
-    """Raised when a parallel worker does not report a valid completion."""
+    pass
