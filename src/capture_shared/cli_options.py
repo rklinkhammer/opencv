@@ -12,6 +12,13 @@ def add_common_camera_args(parser: argparse.ArgumentParser) -> None:
     """Add camera runtime flags used by camera and parallel CLIs."""
 
     parser.add_argument(
+        "-v",
+        "--verbose",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Report camera settings before and after configuration.",
+    )
+    parser.add_argument(
         "--camera-index",
         type=int,
         default=0,
@@ -168,6 +175,7 @@ def build_capture_config(
         capture_backend=args.capture_backend,
         gstreamer_source=args.gstreamer_source,
         gstreamer_pipeline=args.gstreamer_pipeline,
+        verbose=args.verbose,
         log_file=log_file,
     )
     values.update(overrides)

@@ -83,6 +83,12 @@ configure(capture, config, cv2_module) -> None
 constructs an appsink pipeline; pipeline construction already applies configuration, so
 its `configure()` is intentionally empty. `open_camera()` never branches on backend names.
 
+OpenCV configuration reads each requested property back after `set()`. FOURCC and integer
+controls must match; FPS allows a 5% tolerance for driver quantization. A rejected or
+materially different value raises `CaptureError`. With `--verbose`, the CLI also reports
+the pre-configuration properties and every verified update. Native GStreamer reports its
+pipeline in verbose mode because format negotiation happens through pipeline caps.
+
 Public backend names remain `opencv` and `gstreamer`. GStreamer supports explicit
 pipelines plus `usb-v4l2` and `jetson-csi` presets.
 

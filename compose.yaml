@@ -9,10 +9,74 @@ services:
       - ./captures:/workspace/captures
     command:
       - capture-main
+
+      # Output and runtime
       - --camera-output-dir
-      - /workspace/captures/images
+      - "${CAMERA_OUTPUT_DIR:-/workspace/captures/images}"
+      - --gpio-output-dir
+      - "${GPIO_OUTPUT_DIR:-/workspace/captures/gpio}"
       - --duration
       - "${CAPTURE_DURATION:-5}"
+      - --gpio-poll-timeout-ms
+      - "${GPIO_POLL_TIMEOUT_MS:-1000}"
+
+      # Camera backend
+      # VERBOSITY_FLAG: --verbose or --no-verbose
+      - "${VERBOSITY_FLAG:---no-verbose}"
+      - --camera-index
+      - "${CAMERA_INDEX:-0}"
+      - --capture-backend
+      - "${CAPTURE_BACKEND:-opencv}"
+      - --gstreamer-source
+      - "${GSTREAMER_SOURCE:-usb-v4l2}"
+      # Optional custom pipeline; include an appsink named "appsink".
+      # - --gstreamer-pipeline
+      # - "${GSTREAMER_PIPELINE}"
+
+      # Camera mode and controls
+      - --fps
+      - "${CAMERA_FPS:-30}"
+      # Optional controls are omitted by default so the camera chooses its native values.
+      # Uncomment an option and value together when needed.
+      # - --width
+      # - "${CAMERA_WIDTH:-1280}"
+      # - --height
+      # - "${CAMERA_HEIGHT:-720}"
+      # - --fourcc
+      # - "${CAMERA_FOURCC:-MJPG}"
+      # - --auto-exposure
+      # - "${CAMERA_AUTO_EXPOSURE:-3}"
+      # - --exposure
+      # - "${CAMERA_EXPOSURE:--6}"
+      # - --gain
+      # - "${CAMERA_GAIN:-0}"
+      # - --brightness
+      # - "${CAMERA_BRIGHTNESS:-0}"
+
+      # Frame preparation and output format
+      - --warmup-frames
+      - "${WARMUP_FRAMES:-8}"
+      # OVERLAY_TIMESTAMP_FLAG: --overlay-timestamp or --no-overlay-timestamp
+      - "${OVERLAY_TIMESTAMP_FLAG:---no-overlay-timestamp}"
+      - --overlay-text
+      - "${OVERLAY_TEXT:-}"
+      # TIMESTAMP_FILENAME_FLAG: --timestamp-in-filename or --no-timestamp-in-filename
+      - "${TIMESTAMP_FILENAME_FLAG:---timestamp-in-filename}"
+      # EXIF_TIMESTAMP_FLAG: --write-exif-timestamp or --no-write-exif-timestamp
+      - "${EXIF_TIMESTAMP_FLAG:---write-exif-timestamp}"
+      - --image-type
+      - "${IMAGE_TYPE:-jpg}"
+      - --write-queue-size
+      - "${WRITE_QUEUE_SIZE:-512}"
+
+      # Optional camera log
+      # - --camera-log-file
+      # - "${CAMERA_LOG_FILE:-/workspace/captures/camera.log}"
+
+      # Repeat these two lines for each GPIO listener. The output directory above
+      # is already configured; Linux hosts must also pass the gpiochip device.
+      # - --gpio
+      # - "${GPIO_SPEC:-gpiochip0:17:door:both}"
 
   tests:
     build:

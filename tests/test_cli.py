@@ -24,6 +24,7 @@ class CliTests(unittest.TestCase):
                 "./captures",
                 "--duration",
                 "5",
+                "--verbose",
                 "--camera-index",
                 "0",
                 "--capture-backend",
@@ -68,6 +69,7 @@ class CliTests(unittest.TestCase):
         mock_capture_images.assert_called_once()
         config = mock_capture_images.call_args[0][0]
         self.assertIsInstance(config, CaptureConfig)
+        self.assertTrue(config.verbose)
         self.assertEqual("gstreamer", config.capture_backend)
         self.assertEqual("jetson-csi", config.gstreamer_source)
         self.assertEqual(

@@ -24,6 +24,7 @@ class _Capture:
     def __init__(self):
         self.released = False
         self._frames = iter([(True, "raw-frame")])
+        self._properties = {}
 
     def isOpened(self):
         return True
@@ -31,8 +32,12 @@ class _Capture:
     def read(self):
         return next(self._frames, (False, None))
 
-    def set(self, _property, _value):
+    def set(self, property_id, value):
+        self._properties[property_id] = value
         return True
+
+    def get(self, property_id):
+        return self._properties.get(property_id, 0.0)
 
     def release(self):
         self.released = True

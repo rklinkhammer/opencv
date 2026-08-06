@@ -37,4 +37,5 @@ class CaptureConfig:
     capture_backend: str = "opencv"
     gstreamer_source: str = "usb-v4l2"
     gstreamer_pipeline: str | None = None
+    verbose: bool = False
     log_file: Path | None = None

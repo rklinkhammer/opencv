@@ -194,7 +194,7 @@ class CaptureImagesTests(unittest.TestCase):
         fake_cv2 = FakeCv2(fake_capture)
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = CaptureConfig(output_dir=Path(tmp_dir), duration_seconds=1.0)
-            with self.assertRaisesRegex(RuntimeError, "setting failed"):
+            with self.assertRaisesRegex(CaptureError, "Unable to set camera fps"):
                 capture_images(config, cv2_module=fake_cv2)
 
         self.assertTrue(fake_capture.released)

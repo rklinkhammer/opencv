@@ -184,6 +184,11 @@ Capture with explicit camera mode and controls:
 capture-main --camera-output-dir ./captures/images --gpio-output-dir ./captures/gpio --duration 5 --fps 30 --width 640 --height 480 --fourcc MJPG --auto-exposure 3 --exposure -6 --gain 8 --brightness 42 --gpio gpiochip0:17:door:both
 ```
 
+Add `--verbose` to report the camera values before configuration and the verified value
+after each requested update. OpenCV settings are always read back, even without verbose
+output; capture fails with `CaptureError` when the camera rejects or materially changes a
+requested value.
+
 Capture with timestamp overlay text and custom label:
 
 ```bash
@@ -228,6 +233,7 @@ GPIO output semantics:
 
 Optional unified entrypoint arguments:
 
+- `-v`/`--verbose` or `--no-verbose` report camera defaults and verified settings (default `off`)
 - `--camera-index` (default `0`)
 - `--capture-backend` capture backend: `opencv` or `gstreamer` (default `opencv`)
 - `--gstreamer-source` source preset for gstreamer backend: `usb-v4l2` or `jetson-csi` (default `usb-v4l2`)
