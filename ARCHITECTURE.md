@@ -80,14 +80,19 @@ configure(capture, config, cv2_module) -> None
 ```
 
 `OpenCvBackend` opens `cv2.VideoCapture` and applies OpenCV properties. Native GStreamer
-constructs an appsink pipeline; pipeline construction already applies configuration, so
-its `configure()` is intentionally empty. `open_camera()` never branches on backend names.
+constructs an appsink pipeline. Its configuration step installs the optional diagnostic
+reporter; `open_camera()` never branches on backend names.
 
 OpenCV configuration reads each requested property back after `set()`. FOURCC and integer
 controls must match; FPS allows a 5% tolerance for driver quantization. A rejected or
 materially different value raises `CaptureError`. With `--verbose`, the CLI also reports
-the pre-configuration properties and every verified update. Native GStreamer reports its
-pipeline in verbose mode because format negotiation happens through pipeline caps.
+the pre-configuration properties and every verified update. Unsupported diagnostic reads
+are shown as `unavailable` and do not stop capture; requested updates remain strict.
+
+Native GStreamer reports its pipeline and the first negotiated caps in verbose mode. For
+generated presets, the first sample must match the requested width, height, FPS, and BGR
+format. A custom pipeline owns its width, height, and FPS negotiation, but must still
+produce BGR frames because the appsink adapter returns three-channel NumPy arrays.
 
 The portable property set covers frame mode, exposure, image adjustment, white balance,
 focus, pan/tilt/roll/zoom, and buffering. Backend-specific OpenNI, XI, OBSENSOR, mobile,

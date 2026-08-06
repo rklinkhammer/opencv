@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import math
-from typing import Any, Iterator, Protocol
+from typing import Any, Callable, cast, Iterator, Literal, Protocol
 
 import numpy as np
 
@@ -14,10 +14,43 @@ from .models import CaptureConfig
 from .validators import camera_open_error, normalize_backend, normalize_fourcc
 
 _GSTREAMER_SAMPLE_TIMEOUT_MILLISECONDS = 100
-_SETTING_TOLERANCE = 0.05
+_FPS_REL_TOLERANCE = 0.05
+
+Reporter = Callable[[str], None]
+PropertyKind = Literal["fps", "integer", "boolean", "number"]
+
+
+CAMERA_PROPERTIES: dict[str, tuple[str, PropertyKind]] = {
+    "fps": ("CAP_PROP_FPS", "fps"),
+    "frame_width": ("CAP_PROP_FRAME_WIDTH", "integer"),
+    "frame_height": ("CAP_PROP_FRAME_HEIGHT", "integer"),
+    "auto_exposure": ("CAP_PROP_AUTO_EXPOSURE", "number"),
+    "exposure": ("CAP_PROP_EXPOSURE", "number"),
+    "gain": ("CAP_PROP_GAIN", "number"),
+    "brightness": ("CAP_PROP_BRIGHTNESS", "number"),
+    "contrast": ("CAP_PROP_CONTRAST", "number"),
+    "saturation": ("CAP_PROP_SATURATION", "number"),
+    "hue": ("CAP_PROP_HUE", "number"),
+    "gamma": ("CAP_PROP_GAMMA", "number"),
+    "sharpness": ("CAP_PROP_SHARPNESS", "number"),
+    "backlight": ("CAP_PROP_BACKLIGHT", "number"),
+    "auto_white_balance": ("CAP_PROP_AUTO_WB", "boolean"),
+    "white_balance_temperature": ("CAP_PROP_WB_TEMPERATURE", "number"),
+    "white_balance_blue": ("CAP_PROP_WHITE_BALANCE_BLUE_U", "number"),
+    "white_balance_red": ("CAP_PROP_WHITE_BALANCE_RED_V", "number"),
+    "autofocus": ("CAP_PROP_AUTOFOCUS", "boolean"),
+    "focus": ("CAP_PROP_FOCUS", "number"),
+    "zoom": ("CAP_PROP_ZOOM", "number"),
+    "pan": ("CAP_PROP_PAN", "number"),
+    "tilt": ("CAP_PROP_TILT", "number"),
+    "roll": ("CAP_PROP_ROLL", "number"),
+    "buffer_size": ("CAP_PROP_BUFFERSIZE", "integer"),
+}
 
 
 class CaptureHandle(Protocol):
+    """Small capture surface shared by OpenCV and native GStreamer."""
+
     def isOpened(self) -> bool: ...
 
     def read(self) -> tuple[bool, Any]: ...
@@ -26,6 +59,8 @@ class CaptureHandle(Protocol):
 
 
 class CaptureBackend(Protocol):
+    """Open and configure a capture handle without leaking backend branches upstream."""
+
     def open(self, config: CaptureConfig, cv2_module: Any) -> CaptureHandle: ...
 
     def configure(
@@ -33,6 +68,7 @@ class CaptureBackend(Protocol):
         capture: CaptureHandle,
         config: CaptureConfig,
         cv2_module: Any,
+        reporter: Reporter | None = None,
     ) -> None: ...
 
 
@@ -40,61 +76,38 @@ def apply_camera_settings(
     capture: Any,
     config: CaptureConfig,
     cv2_module: Any,
+    reporter: Reporter | None = None,
 ) -> None:
-    settings: list[tuple[str, str, float | int | bool | None]] = [
-        ("fps", "CAP_PROP_FPS", config.fps),
-        ("width", "CAP_PROP_FRAME_WIDTH", config.frame_width),
-        ("height", "CAP_PROP_FRAME_HEIGHT", config.frame_height),
-        ("auto_exposure", "CAP_PROP_AUTO_EXPOSURE", config.auto_exposure),
-        ("exposure", "CAP_PROP_EXPOSURE", config.exposure),
-        ("gain", "CAP_PROP_GAIN", config.gain),
-        ("brightness", "CAP_PROP_BRIGHTNESS", config.brightness),
-        ("contrast", "CAP_PROP_CONTRAST", config.contrast),
-        ("saturation", "CAP_PROP_SATURATION", config.saturation),
-        ("hue", "CAP_PROP_HUE", config.hue),
-        ("gamma", "CAP_PROP_GAMMA", config.gamma),
-        ("sharpness", "CAP_PROP_SHARPNESS", config.sharpness),
-        ("backlight", "CAP_PROP_BACKLIGHT", config.backlight),
-        ("auto_white_balance", "CAP_PROP_AUTO_WB", config.auto_white_balance),
-        (
-            "white_balance_temperature",
-            "CAP_PROP_WB_TEMPERATURE",
-            config.white_balance_temperature,
-        ),
-        (
-            "white_balance_blue",
-            "CAP_PROP_WHITE_BALANCE_BLUE_U",
-            config.white_balance_blue,
-        ),
-        (
-            "white_balance_red",
-            "CAP_PROP_WHITE_BALANCE_RED_V",
-            config.white_balance_red,
-        ),
-        ("autofocus", "CAP_PROP_AUTOFOCUS", config.autofocus),
-        ("focus", "CAP_PROP_FOCUS", config.focus),
-        ("zoom", "CAP_PROP_ZOOM", config.zoom),
-        ("pan", "CAP_PROP_PAN", config.pan),
-        ("tilt", "CAP_PROP_TILT", config.tilt),
-        ("roll", "CAP_PROP_ROLL", config.roll),
-        ("buffer_size", "CAP_PROP_BUFFERSIZE", config.buffer_size),
-    ]
-
-    if config.verbose:
+    """Apply requested OpenCV properties and verify the values read back."""
+    if reporter is not None:
         defaults = []
-        for label, constant, _ in settings:
-            if hasattr(cv2_module, constant):
-                default = _read_camera_property(capture, constant, cv2_module)
-                defaults.append(f"{label}={default:g}")
+        for config_name, (opencv_name, _) in CAMERA_PROPERTIES.items():
+            if hasattr(cv2_module, opencv_name):
+                default = _try_read_camera_property(capture, opencv_name, cv2_module)
+                value = "unavailable" if default is None else f"{default:g}"
+                defaults.append(f"{_property_label(config_name)}={value}")
         if hasattr(cv2_module, "CAP_PROP_FOURCC"):
-            fourcc_value = _read_camera_property(capture, "CAP_PROP_FOURCC", cv2_module)
-            defaults.append(f"fourcc={_format_fourcc(fourcc_value)}")
+            fourcc_value = _try_read_camera_property(capture, "CAP_PROP_FOURCC", cv2_module)
+            defaults.append(
+                "fourcc=unavailable"
+                if fourcc_value is None
+                else f"fourcc={_format_fourcc(fourcc_value)}"
+            )
         defaults.extend(_read_diagnostics(capture, cv2_module))
-        print("Camera defaults: " + ", ".join(defaults))
+        reporter("Camera defaults: " + ", ".join(defaults))
 
-    for label, constant, value in settings:
+    for config_name, (opencv_name, kind) in CAMERA_PROPERTIES.items():
+        value = getattr(config, config_name)
         if value is not None:
-            _set_and_verify(capture, cv2_module, label, constant, float(value), config.verbose)
+            _set_and_verify(
+                capture,
+                cv2_module,
+                _property_label(config_name),
+                opencv_name,
+                float(value),
+                kind,
+                reporter,
+            )
 
     if config.fourcc:
         if not hasattr(cv2_module, "VideoWriter_fourcc"):
@@ -108,7 +121,8 @@ def apply_camera_settings(
             "fourcc",
             "CAP_PROP_FOURCC",
             requested,
-            config.verbose,
+            "integer",
+            reporter,
             requested_display=fourcc,
         )
 
@@ -123,6 +137,13 @@ def _read_camera_property(capture: Any, constant: str, cv2_module: Any) -> float
     if not math.isfinite(value):
         raise CaptureError(f"Camera returned an invalid value for {constant}")
     return value
+
+
+def _try_read_camera_property(capture: Any, constant: str, cv2_module: Any) -> float | None:
+    try:
+        return _read_camera_property(capture, constant, cv2_module)
+    except CaptureError:
+        return None
 
 
 def _read_diagnostics(capture: Any, cv2_module: Any) -> list[str]:
@@ -152,7 +173,8 @@ def _set_and_verify(
     label: str,
     constant: str,
     requested: float,
-    verbose: bool,
+    kind: PropertyKind,
+    reporter: Reporter | None,
     *,
     requested_display: str | None = None,
 ) -> None:
@@ -166,10 +188,12 @@ def _set_and_verify(
         raise CaptureError(f"Camera rejected {label}={requested_display or f'{requested:g}'}")
 
     actual = _read_camera_property(capture, constant, cv2_module)
-    if label == "fourcc":
+    if label == "fourcc" or kind == "integer":
         applied = int(actual) == int(requested)
-    elif label == "fps":
-        applied = math.isclose(actual, requested, rel_tol=_SETTING_TOLERANCE, abs_tol=0.5)
+    elif kind == "fps":
+        applied = math.isclose(actual, requested, rel_tol=_FPS_REL_TOLERANCE, abs_tol=0.5)
+    elif kind == "boolean":
+        applied = actual in {0.0, 1.0} and actual == requested
     else:
         applied = math.isclose(actual, requested, abs_tol=0.5)
     if not applied:
@@ -177,8 +201,8 @@ def _set_and_verify(
             f"Camera did not apply {label}: requested={requested_display or f'{requested:g}'} "
             f"actual={_format_fourcc(actual) if label == 'fourcc' else f'{actual:g}'}"
         )
-    if verbose:
-        print(
+    if reporter is not None:
+        reporter(
             f"Camera setting verified: {label}="
             f"{requested_display or f'{requested:g}'} (actual={_format_fourcc(actual) if label == 'fourcc' else f'{actual:g}'})"
         )
@@ -190,7 +214,12 @@ def _format_fourcc(value: float) -> str:
     return text if text.isprintable() and text.strip("\x00") else str(encoded)
 
 
+def _property_label(config_name: str) -> str:
+    return config_name.removeprefix("frame_")
+
+
 def build_gstreamer_pipeline(config: CaptureConfig) -> str:
+    """Return a custom pipeline unchanged or build one of the supported presets."""
     if config.gstreamer_pipeline:
         return config.gstreamer_pipeline
 
@@ -229,6 +258,8 @@ def build_gstreamer_pipeline(config: CaptureConfig) -> str:
 
 
 class NativeGStreamerCapture:
+    """Adapt a GStreamer appsink pipeline to the OpenCV capture interface."""
+
     def __init__(self, config: CaptureConfig):
         try:
             import gi
@@ -244,11 +275,12 @@ class NativeGStreamerCapture:
         self._Gst = Gst
         Gst.init(None)
 
-        pipeline_text = build_gstreamer_pipeline(config)
-        if config.verbose:
-            print(f"GStreamer pipeline: {pipeline_text}")
+        self._config = config
+        self._pipeline_text = build_gstreamer_pipeline(config)
+        self._reporter: Reporter | None = None
+        self._caps_verified = False
         try:
-            pipeline = Gst.parse_launch(pipeline_text)
+            pipeline = Gst.parse_launch(self._pipeline_text)
         except Exception as exc:
             raise CaptureError(f"Invalid GStreamer pipeline: {exc}") from exc
 
@@ -266,6 +298,11 @@ class NativeGStreamerCapture:
         state_result = self._pipeline.set_state(Gst.State.PLAYING)
         if state_result != Gst.StateChangeReturn.FAILURE:
             self._opened = True
+
+    def set_reporter(self, reporter: Reporter | None) -> None:
+        self._reporter = reporter
+        if reporter is not None:
+            reporter(f"GStreamer pipeline: {self._pipeline_text}")
 
     def isOpened(self) -> bool:
         return self._opened
@@ -299,6 +336,10 @@ class NativeGStreamerCapture:
         if width <= 0 or height <= 0:
             return False, None
 
+        if not self._caps_verified:
+            self._verify_caps(structure, width, height)
+            self._caps_verified = True
+
         ok, mapped = buffer.map(self._Gst.MapFlags.READ)
         if not ok:
             return False, None
@@ -315,6 +356,36 @@ class NativeGStreamerCapture:
         finally:
             buffer.unmap(mapped)
 
+    def _verify_caps(self, structure: Any, width: int, height: int) -> None:
+        pixel_format = str(structure.get_value("format") or "")
+        fps = _gstreamer_fps(structure.get_value("framerate"))
+        details = f"width={width}, height={height}, fps={fps:g}, format={pixel_format}"
+        if self._reporter is not None:
+            self._reporter(f"GStreamer negotiated: {details}")
+
+        if pixel_format != "BGR":
+            raise CaptureError(f"GStreamer negotiated unsupported caps: {details}")
+        if self._config.gstreamer_pipeline:
+            return
+
+        expected_width = self._config.frame_width or 1280
+        expected_height = self._config.frame_height or 720
+        if (
+            width != expected_width
+            or height != expected_height
+            or not math.isclose(
+                fps,
+                self._config.fps,
+                rel_tol=_FPS_REL_TOLERANCE,
+                abs_tol=0.5,
+            )
+        ):
+            raise CaptureError(
+                "GStreamer did not apply requested caps: "
+                f"requested=width={expected_width}, height={expected_height}, "
+                f"fps={self._config.fps:g}, format=BGR; actual={details}"
+            )
+
     def release(self) -> None:
         self._pipeline.set_state(self._Gst.State.NULL)
         self._opened = False
@@ -329,8 +400,9 @@ class OpenCvBackend:
         capture: CaptureHandle,
         config: CaptureConfig,
         cv2_module: Any,
+        reporter: Reporter | None = None,
     ) -> None:
-        apply_camera_settings(capture, config, cv2_module)
+        apply_camera_settings(capture, config, cv2_module, reporter)
 
 
 class NativeGStreamerBackend:
@@ -343,11 +415,14 @@ class NativeGStreamerBackend:
         capture: CaptureHandle,
         config: CaptureConfig,
         cv2_module: Any,
+        reporter: Reporter | None = None,
     ) -> None:
-        del capture, config, cv2_module
+        del config, cv2_module
+        cast(NativeGStreamerCapture, capture).set_reporter(reporter)
 
 
 def create_capture_backend(name: str) -> CaptureBackend:
+    """Resolve a validated public backend name to its implementation."""
     backend = normalize_backend(name)
     if backend == "opencv":
         return OpenCvBackend()
@@ -359,15 +434,29 @@ def open_camera(
     config: CaptureConfig,
     cv2_module: Any,
     backend: CaptureBackend,
+    reporter: Reporter | None = None,
 ) -> Iterator[CaptureHandle]:
+    """Open, configure, and always release a camera capture handle."""
     capture = backend.open(config, cv2_module)
     try:
         if not capture.isOpened():
             raise CaptureError(camera_open_error(config.camera_index))
-        backend.configure(capture, config, cv2_module)
+        backend.configure(capture, config, cv2_module, reporter)
         yield capture
     finally:
         try:
             capture.release()
         except Exception:
             pass
+
+
+def _gstreamer_fps(value: Any) -> float:
+    for numerator_name, denominator_name in (("numerator", "denominator"), ("num", "denom")):
+        if hasattr(value, numerator_name) and hasattr(value, denominator_name):
+            denominator = float(getattr(value, denominator_name))
+            if denominator:
+                return float(getattr(value, numerator_name)) / denominator
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise CaptureError("GStreamer caps do not contain a valid framerate") from exc

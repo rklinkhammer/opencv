@@ -23,12 +23,16 @@ _QUEUE_PUT_TIMEOUT_SECONDS = 0.05
 
 @dataclass(frozen=True)
 class WriterCloseResult:
+    """Observable state after a bounded writer shutdown attempt."""
+
     mode: str
     thread_alive: bool
     pending_items: int
 
 
 class WriterState(Enum):
+    """Lifecycle states used to reject unsafe writer operations."""
+
     NEW = "new"
     RUNNING = "running"
     STOPPING = "stopping"
@@ -64,6 +68,8 @@ def write_exif_timestamp(image_path: Path, capture_time: float) -> None:
 
 
 class AsyncFrameWriter:
+    """Persist frames off the capture thread using a bounded queue."""
+
     def __init__(
         self,
         *,

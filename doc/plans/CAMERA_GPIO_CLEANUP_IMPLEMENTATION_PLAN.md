@@ -1,5 +1,9 @@
 # Camera/GPIO Capture Cleanup — Implementor Prompt and PR Plan
 
+> **Historical document:** This plan describes an earlier design and names components
+> that have since been removed. See [ARCHITECTURE.md](../../ARCHITECTURE.md) for the
+> current implementation.
+
 ## Purpose
 
 Use this prompt to drive a cleanup implementation pass for the Python camera capture, GPIO edge logging, and shared runtime packages.
@@ -682,4 +686,3 @@ This should make the package ready for future additions such as:
 - hardware trigger correlation
 - additional camera backends
 - richer benchmarking
-

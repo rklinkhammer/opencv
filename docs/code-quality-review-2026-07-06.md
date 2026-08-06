@@ -1,5 +1,9 @@
 # Code Quality Review - 2026-07-06
 
+> **Historical document:** This review records the code as it existed on its stated date.
+> Some referenced probe and metrics code has since been removed. See
+> [ARCHITECTURE.md](../ARCHITECTURE.md) for the current implementation.
+
 ## Scope
 - Reviewed runtime capture pipeline, async shutdown path, backend ingestion, probe flow, CLI diagnostics, tests, and packaging metadata.
 - Primary files:

@@ -78,6 +78,7 @@ def capture_images(
     cv2_module: object | None = None,
     frame_transform: FrameTransform | None = None,
 ) -> list[Path]:
+    """Capture frames for the configured duration and return committed image paths."""
     backend, extension = validate_capture_config(config)
     if cv2_module is None:
         import cv2 as cv2_module  # type: ignore[no-redef]
@@ -93,7 +94,8 @@ def capture_images(
         recover_stale_outputs(config.output_dir)
         logger.info("Starting capture: backend=%s duration=%.3fs", backend, config.duration_seconds)
         capture_backend = backends.create_capture_backend(backend)
-        with open_camera(config, cv2_module, capture_backend) as capture:
+        reporter = print if config.verbose else None
+        with open_camera(config, cv2_module, capture_backend, reporter) as capture:
             writer = AsyncFrameWriter(
                 config=config,
                 cv2_module=cv2_module,

@@ -1,5 +1,8 @@
 # Refactor Report
 
+> **Historical document:** This report predates the current simplified implementation.
+> See [ARCHITECTURE.md](../../ARCHITECTURE.md) for the maintained design reference.
+
 Date: 2026-07-06
 Project: Camera Capture App
 

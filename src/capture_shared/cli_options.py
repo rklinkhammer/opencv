@@ -195,14 +195,14 @@ def build_capture_config(
     output_dir: Path,
     duration_seconds: float,
     log_file: Path | None,
-    **overrides: object,
+    capture_backend: str | None = None,
+    gstreamer_source: str | None = None,
+    frame_width: int | None = None,
+    frame_height: int | None = None,
 ) -> CaptureConfig:
-    """Build CaptureConfig from args with optional overrides.
+    """Build a capture configuration, optionally overriding benchmark fields."""
 
-    Return a fully typed immutable capture configuration.
-    """
-
-    values: dict[str, object] = dict(
+    return CaptureConfig(
         output_dir=output_dir,
         duration_seconds=duration_seconds,
         camera_index=args.camera_index,
@@ -214,8 +214,8 @@ def build_capture_config(
         write_exif_timestamp=args.write_exif_timestamp,
         image_extension=args.image_type,
         write_queue_size=args.write_queue_size,
-        frame_width=args.width,
-        frame_height=args.height,
+        frame_width=frame_width if frame_width is not None else args.width,
+        frame_height=frame_height if frame_height is not None else args.height,
         fourcc=args.fourcc,
         auto_exposure=args.auto_exposure,
         exposure=args.exposure,
@@ -238,11 +238,9 @@ def build_capture_config(
         tilt=args.tilt,
         roll=args.roll,
         buffer_size=args.buffer_size,
-        capture_backend=args.capture_backend,
-        gstreamer_source=args.gstreamer_source,
+        capture_backend=capture_backend or args.capture_backend,
+        gstreamer_source=gstreamer_source or args.gstreamer_source,
         gstreamer_pipeline=args.gstreamer_pipeline,
         verbose=args.verbose,
         log_file=log_file,
     )
-    values.update(overrides)
-    return CaptureConfig(**values)  # type: ignore[arg-type]

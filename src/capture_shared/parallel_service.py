@@ -8,7 +8,7 @@ from threading import Event, Thread
 import time
 from typing import Callable
 
-from capture_shared.errors import CaptureError
+from capture_shared.errors import CaptureError, ConfigurationError
 from camera_capture.models import CaptureConfig
 from gpio_capture.gpio_edge import GpioEdgeConfig
 
@@ -17,6 +17,8 @@ _GPIO_JOIN_GRACE_SECONDS = 1.0
 
 @dataclass(frozen=True)
 class GpioJob:
+    """One GPIO line monitored alongside camera capture."""
+
     chip: str
     line_offset: int
     tag: str
@@ -29,6 +31,8 @@ class GpioJob:
 
 @dataclass(frozen=True)
 class WorkerOutcome:
+    """Files or failure reported by one GPIO worker."""
+
     key: str
     files: tuple[Path, ...] = ()
     error: Exception | None = None
@@ -36,6 +40,8 @@ class WorkerOutcome:
 
 @dataclass(frozen=True)
 class ParallelOutcome:
+    """Combined camera and GPIO results from one parallel run."""
+
     camera_output_dir: Path
     images: tuple[Path, ...]
     camera_error: Exception | None
@@ -53,13 +59,18 @@ def execute_parallel_capture(
     capture_fn: Callable[[CaptureConfig], list[Path]],
     gpio_fn: Callable[..., list[Path]],
 ) -> ParallelOutcome:
+    """Run camera capture with one worker per GPIO job and collect all outcomes."""
+    if gpio_jobs and gpio_output_dir is None:
+        raise ConfigurationError("gpio_output_dir is required when GPIO jobs are configured")
+
     started = time.perf_counter()
     stop_event = Event()
     results: list[list[Path] | Exception | None] = [None] * len(gpio_jobs)
 
     def run_gpio(index: int, job: GpioJob) -> None:
+        assert gpio_output_dir is not None
         config = GpioEdgeConfig(
-            output_dir=gpio_output_dir,  # type: ignore[arg-type]
+            output_dir=gpio_output_dir,
             chip_name=job.chip,
             line_offset=job.line_offset,
             tag=job.tag,

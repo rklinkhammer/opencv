@@ -4,6 +4,7 @@ These tests validate argument wiring, benchmark paths, and non-zero exit
 behavior when runtime operations fail.
 """
 
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 from io import StringIO
@@ -11,9 +12,22 @@ from contextlib import redirect_stdout
 
 from camera_capture.cli import main
 from camera_capture.models import CaptureConfig
+from parallel_cli import build_parser as build_parallel_parser
 
 
 class CliTests(unittest.TestCase):
+    def test_compose_lists_every_parallel_cli_option(self):
+        parser = build_parallel_parser()
+        compose = (Path(__file__).parents[1] / "compose.yaml").read_text(encoding="utf-8")
+        options = {
+            option
+            for action in parser._actions
+            for option in action.option_strings
+            if option.startswith("--") and option != "--help"
+        }
+
+        self.assertEqual([], sorted(option for option in options if option not in compose))
+
     @patch("camera_capture.cli.capture_images")
     def test_main_success(self, mock_capture_images):
         mock_capture_images.return_value = ["one", "two"]

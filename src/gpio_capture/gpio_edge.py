@@ -20,6 +20,8 @@ from .runner_v2 import run_v2
 
 @dataclass(frozen=True)
 class GpioEdgeConfig:
+    """Settings for recording one GPIO line's initial value and edge events."""
+
     output_dir: Path
     chip_name: str
     line_offset: int
@@ -72,6 +74,7 @@ def run_gpio_edge_logger(
     gpiod_module: Any | None = None,
     stop_event: threading.Event | None = None,
 ) -> list[Path]:
+    """Record GPIO state changes using either supported libgpiod API version."""
     validate_gpio_config(config)
 
     if gpiod_module is None:

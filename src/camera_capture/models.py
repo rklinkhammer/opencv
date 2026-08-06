@@ -9,6 +9,8 @@ from typing import Any
 
 @dataclass(frozen=True)
 class FrameRecord:
+    """A captured image paired with its sequence number and Unix timestamp."""
+
     sequence: int
     captured_at: float
     image: Any
@@ -16,6 +18,8 @@ class FrameRecord:
 
 @dataclass(frozen=True)
 class CaptureConfig:
+    """Immutable camera and output settings shared by CLI and library callers."""
+
     output_dir: Path
     duration_seconds: float = 5.0
     camera_index: int = 0

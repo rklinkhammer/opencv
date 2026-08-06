@@ -547,7 +547,7 @@ class CaptureImagesTests(unittest.TestCase):
 
         mock_factory.assert_called_once_with("gstreamer")
         backend.open.assert_called_once_with(config, fake_cv2)
-        backend.configure.assert_called_once_with(fake_capture, config, fake_cv2)
+        backend.configure.assert_called_once_with(fake_capture, config, fake_cv2, None)
 
     def test_capture_uses_custom_gstreamer_pipeline(self):
         from camera_capture.backends import build_gstreamer_pipeline

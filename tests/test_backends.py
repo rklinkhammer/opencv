@@ -5,7 +5,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from camera_capture.backends import (
+    CAMERA_PROPERTIES,
     NativeGStreamerBackend,
+    NativeGStreamerCapture,
     OpenCvBackend,
     apply_camera_settings,
     create_capture_backend,
@@ -64,10 +66,9 @@ class BackendFactoryTests(unittest.TestCase):
 
         config = CaptureConfig(output_dir=Path("."), fps=30.0, frame_width=640, verbose=True)
 
-        with patch("builtins.print") as report:
-            apply_camera_settings(Capture(), config, Cv2())
+        lines = []
+        apply_camera_settings(Capture(), config, Cv2(), lines.append)
 
-        lines = [call.args[0] for call in report.call_args_list]
         self.assertIn(
             "Camera defaults: fps=29.97, width=1920, backend=AVFOUNDATION, "
             "format=16, codec_pixel_format=0, temperature=42",
@@ -75,6 +76,77 @@ class BackendFactoryTests(unittest.TestCase):
         )
         self.assertIn("Camera setting verified: fps=30 (actual=30)", lines)
         self.assertIn("Camera setting verified: width=640 (actual=640)", lines)
+
+    def test_unavailable_default_does_not_prevent_requested_setting(self):
+        class Cv2:
+            CAP_PROP_FPS = 5
+
+        class Capture:
+            reads = 0
+
+            def get(self, property_id):
+                self.reads += 1
+                if self.reads == 1:
+                    raise RuntimeError("unsupported diagnostic read")
+                return 30.0
+
+            def set(self, property_id, value):
+                return True
+
+        lines = []
+        apply_camera_settings(
+            Capture(), CaptureConfig(output_dir=Path("."), fps=30), Cv2(), lines.append
+        )
+
+        self.assertIn("Camera defaults: fps=unavailable", lines)
+        self.assertIn("Camera setting verified: fps=30 (actual=30)", lines)
+
+    def test_boolean_verification_does_not_accept_half_enabled_value(self):
+        class Cv2:
+            CAP_PROP_FPS = 5
+            CAP_PROP_AUTOFOCUS = 39
+
+        capture = MagicMock()
+        capture.set.return_value = True
+        capture.get.side_effect = lambda property_id: 30.0 if property_id == 5 else 0.5
+
+        with self.assertRaisesRegex(CaptureError, "did not apply autofocus"):
+            apply_camera_settings(
+                capture,
+                CaptureConfig(output_dir=Path("."), fps=30, autofocus=True),
+                Cv2(),
+            )
+
+    def test_property_registry_covers_all_configurable_opencv_controls(self):
+        self.assertEqual(
+            {
+                "fps",
+                "frame_width",
+                "frame_height",
+                "auto_exposure",
+                "exposure",
+                "gain",
+                "brightness",
+                "contrast",
+                "saturation",
+                "hue",
+                "gamma",
+                "sharpness",
+                "backlight",
+                "auto_white_balance",
+                "white_balance_temperature",
+                "white_balance_blue",
+                "white_balance_red",
+                "autofocus",
+                "focus",
+                "zoom",
+                "pan",
+                "tilt",
+                "roll",
+                "buffer_size",
+            },
+            set(CAMERA_PROPERTIES),
+        )
 
     def test_configuration_fails_when_camera_does_not_apply_value(self):
         class Cv2:
@@ -144,8 +216,49 @@ class BackendFactoryTests(unittest.TestCase):
             self.assertIs(opened, capture)
 
         backend.open.assert_called_once_with(config, cv2_module)
-        backend.configure.assert_called_once_with(capture, config, cv2_module)
+        backend.configure.assert_called_once_with(capture, config, cv2_module, None)
         capture.release.assert_called_once_with()
+
+    def test_gstreamer_caps_are_reported_and_verified(self):
+        class Fraction:
+            numerator = 30
+            denominator = 1
+
+        class Structure:
+            values = {"format": "BGR", "framerate": Fraction()}
+
+            def get_value(self, name):
+                return self.values[name]
+
+        capture = object.__new__(NativeGStreamerCapture)
+        capture._config = CaptureConfig(  # noqa: SLF001 - focused boundary test
+            output_dir=Path("."), frame_width=640, frame_height=480, fps=30
+        )
+        lines = []
+        capture._reporter = lines.append  # noqa: SLF001 - focused boundary test
+
+        capture._verify_caps(Structure(), 640, 480)  # noqa: SLF001
+
+        self.assertEqual(["GStreamer negotiated: width=640, height=480, fps=30, format=BGR"], lines)
+
+    def test_gstreamer_caps_mismatch_fails_for_generated_pipeline(self):
+        class Fraction:
+            numerator = 30
+            denominator = 1
+
+        structure = MagicMock()
+        structure.get_value.side_effect = lambda name: {
+            "format": "BGR",
+            "framerate": Fraction(),
+        }[name]
+        capture = object.__new__(NativeGStreamerCapture)
+        capture._config = CaptureConfig(  # noqa: SLF001
+            output_dir=Path("."), frame_width=640, frame_height=480, fps=30
+        )
+        capture._reporter = None  # noqa: SLF001
+
+        with self.assertRaisesRegex(CaptureError, "did not apply requested caps"):
+            capture._verify_caps(structure, 1280, 720)  # noqa: SLF001
 
 
 if __name__ == "__main__":

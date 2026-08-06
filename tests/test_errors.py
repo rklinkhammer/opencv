@@ -113,6 +113,20 @@ class ErrorHierarchyTests(unittest.TestCase):
 
         self.assertIsInstance(outcome.workers[0].error, CaptureError)
 
+    def test_parallel_service_requires_output_directory_for_gpio_jobs(self):
+        config = CaptureConfig(output_dir=Path("."), duration_seconds=0.1)
+
+        with self.assertRaisesRegex(ConfigurationError, "gpio_output_dir is required"):
+            execute_parallel_capture(
+                camera_config=config,
+                gpio_jobs=[GpioJob("gpiochip0", 4, "door", "both")],
+                gpio_output_dir=None,
+                duration_seconds=0.1,
+                gpio_poll_timeout_ms=1,
+                capture_fn=lambda _config: [],
+                gpio_fn=lambda *_args, **_kwargs: [],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

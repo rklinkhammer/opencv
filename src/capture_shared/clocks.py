@@ -7,12 +7,16 @@ from typing import Protocol
 
 
 class Clock(Protocol):
+    """Wall and monotonic clocks required by capture loops."""
+
     def wall_time(self) -> float: ...
 
     def monotonic(self) -> float: ...
 
 
 class SystemClock:
+    """Production clock backed by the standard library."""
+
     def wall_time(self) -> float:
         return time.time()
 

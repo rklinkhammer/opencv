@@ -34,6 +34,8 @@ def temporary_peer_path(output_path: Path) -> Path:
 
 
 class OutputTransaction:
+    """Reserve a unique name and atomically replace it with completed output."""
+
     def __init__(self, output_dir: Path, file_stem: str, extension: str) -> None:
         self.destination = reserve_unique_path(output_dir, file_stem, extension)
         self.temporary = temporary_peer_path(self.destination)

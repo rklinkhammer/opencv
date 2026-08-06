@@ -189,6 +189,22 @@ after each requested update. OpenCV settings are always read back, even without 
 output; capture fails with `CaptureError` when the camera rejects or materially changes a
 requested value.
 
+The OpenCV backend maps the portable controls directly to these standard properties:
+
+| CLI options | OpenCV properties |
+| --- | --- |
+| `--fps`, `--width`, `--height`, `--fourcc` | `CAP_PROP_FPS`, `CAP_PROP_FRAME_WIDTH`, `CAP_PROP_FRAME_HEIGHT`, `CAP_PROP_FOURCC` |
+| `--auto-exposure`, `--exposure`, `--gain` | `CAP_PROP_AUTO_EXPOSURE`, `CAP_PROP_EXPOSURE`, `CAP_PROP_GAIN` |
+| `--brightness`, `--contrast`, `--saturation`, `--hue`, `--gamma`, `--sharpness`, `--backlight` | Matching `CAP_PROP_*` image controls |
+| `--auto-white-balance`, `--white-balance-temperature`, `--white-balance-blue`, `--white-balance-red` | `CAP_PROP_AUTO_WB`, `CAP_PROP_WB_TEMPERATURE`, and blue/red white-balance properties |
+| `--autofocus`, `--focus`, `--zoom`, `--pan`, `--tilt`, `--roll` | Matching `CAP_PROP_*` lens and position controls |
+| `--buffer-size` | `CAP_PROP_BUFFERSIZE` |
+
+Supported ranges and units come from the camera driver. A property being present in
+OpenCV does not guarantee that a particular camera can set it. Generated GStreamer
+presets verify negotiated width, height, FPS, and BGR format on the first frame. A custom
+GStreamer pipeline controls its own mode and must end in BGR caps at the named appsink.
+
 Capture with timestamp overlay text and custom label:
 
 ```bash
