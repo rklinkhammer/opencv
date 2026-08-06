@@ -52,6 +52,7 @@ class CaptureConfigValidationTests(unittest.TestCase):
             ("write_queue_size", 0, "write_queue_size"),
             ("frame_width", 0, "frame_width"),
             ("frame_height", 0, "frame_height"),
+            ("buffer_size", 0, "buffer_size"),
             ("capture_backend", "unknown", "capture_backend"),
             ("image_extension", "tiff", "image_extension"),
             ("fourcc", "MJ", "fourcc"),

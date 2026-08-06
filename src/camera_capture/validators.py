@@ -66,6 +66,8 @@ def validate_capture_config(config: CaptureConfig) -> tuple[str, str]:
         raise ConfigurationError("frame_width must be greater than 0 when provided")
     if config.frame_height is not None and config.frame_height <= 0:
         raise ConfigurationError("frame_height must be greater than 0 when provided")
+    if config.buffer_size is not None and config.buffer_size <= 0:
+        raise ConfigurationError("buffer_size must be greater than 0 when provided")
 
     backend = normalize_backend(config.capture_backend)
     normalized_extension = normalize_image_extension(config.image_extension)

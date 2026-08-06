@@ -45,9 +45,15 @@ class BackendFactoryTests(unittest.TestCase):
         class Cv2:
             CAP_PROP_FPS = 5
             CAP_PROP_FRAME_WIDTH = 3
+            CAP_PROP_FORMAT = 8
+            CAP_PROP_CODEC_PIXEL_FORMAT = 46
+            CAP_PROP_TEMPERATURE = 23
 
         class Capture:
-            values = {5: 29.97, 3: 1920.0}
+            values = {5: 29.97, 3: 1920.0, 8: 16.0, 46: 0.0, 23: 42.0}
+
+            def getBackendName(self):
+                return "AVFOUNDATION"
 
             def get(self, property_id):
                 return self.values[property_id]
@@ -62,7 +68,11 @@ class BackendFactoryTests(unittest.TestCase):
             apply_camera_settings(Capture(), config, Cv2())
 
         lines = [call.args[0] for call in report.call_args_list]
-        self.assertIn("Camera defaults: fps=29.97, width=1920", lines)
+        self.assertIn(
+            "Camera defaults: fps=29.97, width=1920, backend=AVFOUNDATION, "
+            "format=16, codec_pixel_format=0, temperature=42",
+            lines,
+        )
         self.assertIn("Camera setting verified: fps=30 (actual=30)", lines)
         self.assertIn("Camera setting verified: width=640 (actual=640)", lines)
 
@@ -77,6 +87,39 @@ class BackendFactoryTests(unittest.TestCase):
 
         with self.assertRaisesRegex(CaptureError, "did not apply fps"):
             apply_camera_settings(capture, config, Cv2())
+
+    def test_standard_uvc_controls_are_applied_through_the_registry(self):
+        class Cv2:
+            CAP_PROP_FPS = 5
+            CAP_PROP_CONTRAST = 11
+            CAP_PROP_AUTO_WB = 44
+            CAP_PROP_AUTOFOCUS = 39
+            CAP_PROP_BUFFERSIZE = 38
+
+        class Capture:
+            def __init__(self):
+                self.values = {}
+
+            def set(self, property_id, value):
+                self.values[property_id] = value
+                return True
+
+            def get(self, property_id):
+                return self.values[property_id]
+
+        capture = Capture()
+        config = CaptureConfig(
+            output_dir=Path("."),
+            fps=30,
+            contrast=10,
+            auto_white_balance=False,
+            autofocus=True,
+            buffer_size=2,
+        )
+
+        apply_camera_settings(capture, config, Cv2())
+
+        self.assertEqual({5: 30.0, 11: 10.0, 44: 0.0, 39: 1.0, 38: 2.0}, capture.values)
 
     def test_native_gstreamer_backend_owns_capture_construction(self):
         config = CaptureConfig(output_dir=Path("."), capture_backend="gstreamer")

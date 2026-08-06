@@ -95,6 +95,55 @@ def add_common_camera_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Optional camera brightness value.",
     )
+    parser.add_argument("--contrast", type=float, default=None, help="Optional contrast value.")
+    parser.add_argument("--saturation", type=float, default=None, help="Optional saturation value.")
+    parser.add_argument("--hue", type=float, default=None, help="Optional hue value.")
+    parser.add_argument("--gamma", type=float, default=None, help="Optional gamma value.")
+    parser.add_argument("--sharpness", type=float, default=None, help="Optional sharpness value.")
+    parser.add_argument(
+        "--backlight", type=float, default=None, help="Optional backlight compensation value."
+    )
+    parser.add_argument(
+        "--auto-white-balance",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable or disable automatic white balance.",
+    )
+    parser.add_argument(
+        "--white-balance-temperature",
+        type=float,
+        default=None,
+        help="Optional white balance color temperature.",
+    )
+    parser.add_argument(
+        "--white-balance-blue",
+        type=float,
+        default=None,
+        help="Optional blue-channel white balance value.",
+    )
+    parser.add_argument(
+        "--white-balance-red",
+        type=float,
+        default=None,
+        help="Optional red-channel white balance value.",
+    )
+    parser.add_argument(
+        "--autofocus",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable or disable autofocus.",
+    )
+    parser.add_argument("--focus", type=float, default=None, help="Optional manual focus value.")
+    parser.add_argument("--zoom", type=float, default=None, help="Optional zoom value.")
+    parser.add_argument("--pan", type=float, default=None, help="Optional pan value.")
+    parser.add_argument("--tilt", type=float, default=None, help="Optional tilt value.")
+    parser.add_argument("--roll", type=float, default=None, help="Optional roll value.")
+    parser.add_argument(
+        "--buffer-size",
+        type=int,
+        default=None,
+        help="Optional capture buffer size.",
+    )
     parser.add_argument(
         "--warmup-frames",
         type=int,
@@ -172,6 +221,23 @@ def build_capture_config(
         exposure=args.exposure,
         gain=args.gain,
         brightness=args.brightness,
+        contrast=args.contrast,
+        saturation=args.saturation,
+        hue=args.hue,
+        gamma=args.gamma,
+        sharpness=args.sharpness,
+        backlight=args.backlight,
+        auto_white_balance=args.auto_white_balance,
+        white_balance_temperature=args.white_balance_temperature,
+        white_balance_blue=args.white_balance_blue,
+        white_balance_red=args.white_balance_red,
+        autofocus=args.autofocus,
+        focus=args.focus,
+        zoom=args.zoom,
+        pan=args.pan,
+        tilt=args.tilt,
+        roll=args.roll,
+        buffer_size=args.buffer_size,
         capture_backend=args.capture_backend,
         gstreamer_source=args.gstreamer_source,
         gstreamer_pipeline=args.gstreamer_pipeline,

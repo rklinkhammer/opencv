@@ -41,7 +41,7 @@ def apply_camera_settings(
     config: CaptureConfig,
     cv2_module: Any,
 ) -> None:
-    settings = [
+    settings: list[tuple[str, str, float | int | bool | None]] = [
         ("fps", "CAP_PROP_FPS", config.fps),
         ("width", "CAP_PROP_FRAME_WIDTH", config.frame_width),
         ("height", "CAP_PROP_FRAME_HEIGHT", config.frame_height),
@@ -49,6 +49,35 @@ def apply_camera_settings(
         ("exposure", "CAP_PROP_EXPOSURE", config.exposure),
         ("gain", "CAP_PROP_GAIN", config.gain),
         ("brightness", "CAP_PROP_BRIGHTNESS", config.brightness),
+        ("contrast", "CAP_PROP_CONTRAST", config.contrast),
+        ("saturation", "CAP_PROP_SATURATION", config.saturation),
+        ("hue", "CAP_PROP_HUE", config.hue),
+        ("gamma", "CAP_PROP_GAMMA", config.gamma),
+        ("sharpness", "CAP_PROP_SHARPNESS", config.sharpness),
+        ("backlight", "CAP_PROP_BACKLIGHT", config.backlight),
+        ("auto_white_balance", "CAP_PROP_AUTO_WB", config.auto_white_balance),
+        (
+            "white_balance_temperature",
+            "CAP_PROP_WB_TEMPERATURE",
+            config.white_balance_temperature,
+        ),
+        (
+            "white_balance_blue",
+            "CAP_PROP_WHITE_BALANCE_BLUE_U",
+            config.white_balance_blue,
+        ),
+        (
+            "white_balance_red",
+            "CAP_PROP_WHITE_BALANCE_RED_V",
+            config.white_balance_red,
+        ),
+        ("autofocus", "CAP_PROP_AUTOFOCUS", config.autofocus),
+        ("focus", "CAP_PROP_FOCUS", config.focus),
+        ("zoom", "CAP_PROP_ZOOM", config.zoom),
+        ("pan", "CAP_PROP_PAN", config.pan),
+        ("tilt", "CAP_PROP_TILT", config.tilt),
+        ("roll", "CAP_PROP_ROLL", config.roll),
+        ("buffer_size", "CAP_PROP_BUFFERSIZE", config.buffer_size),
     ]
 
     if config.verbose:
@@ -60,6 +89,7 @@ def apply_camera_settings(
         if hasattr(cv2_module, "CAP_PROP_FOURCC"):
             fourcc_value = _read_camera_property(capture, "CAP_PROP_FOURCC", cv2_module)
             defaults.append(f"fourcc={_format_fourcc(fourcc_value)}")
+        defaults.extend(_read_diagnostics(capture, cv2_module))
         print("Camera defaults: " + ", ".join(defaults))
 
     for label, constant, value in settings:
@@ -93,6 +123,27 @@ def _read_camera_property(capture: Any, constant: str, cv2_module: Any) -> float
     if not math.isfinite(value):
         raise CaptureError(f"Camera returned an invalid value for {constant}")
     return value
+
+
+def _read_diagnostics(capture: Any, cv2_module: Any) -> list[str]:
+    diagnostics = []
+    if hasattr(capture, "getBackendName"):
+        try:
+            diagnostics.append(f"backend={capture.getBackendName()}")
+        except Exception:
+            pass
+    for label, constant in (
+        ("format", "CAP_PROP_FORMAT"),
+        ("codec_pixel_format", "CAP_PROP_CODEC_PIXEL_FORMAT"),
+        ("temperature", "CAP_PROP_TEMPERATURE"),
+    ):
+        if not hasattr(cv2_module, constant):
+            continue
+        try:
+            diagnostics.append(f"{label}={_read_camera_property(capture, constant, cv2_module):g}")
+        except CaptureError:
+            diagnostics.append(f"{label}=unavailable")
+    return diagnostics
 
 
 def _set_and_verify(

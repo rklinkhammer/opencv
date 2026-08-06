@@ -52,6 +52,40 @@ services:
       # - "${CAMERA_GAIN:-0}"
       # - --brightness
       # - "${CAMERA_BRIGHTNESS:-0}"
+      # - --contrast
+      # - "${CAMERA_CONTRAST:-0}"
+      # - --saturation
+      # - "${CAMERA_SATURATION:-0}"
+      # - --hue
+      # - "${CAMERA_HUE:-0}"
+      # - --gamma
+      # - "${CAMERA_GAMMA:-100}"
+      # - --sharpness
+      # - "${CAMERA_SHARPNESS:-0}"
+      # - --backlight
+      # - "${CAMERA_BACKLIGHT:-0}"
+      # AUTO_WHITE_BALANCE_FLAG: --auto-white-balance or --no-auto-white-balance
+      # - "${AUTO_WHITE_BALANCE_FLAG:---auto-white-balance}"
+      # - --white-balance-temperature
+      # - "${WHITE_BALANCE_TEMPERATURE:-4600}"
+      # - --white-balance-blue
+      # - "${WHITE_BALANCE_BLUE:-0}"
+      # - --white-balance-red
+      # - "${WHITE_BALANCE_RED:-0}"
+      # AUTOFOCUS_FLAG: --autofocus or --no-autofocus
+      # - "${AUTOFOCUS_FLAG:---autofocus}"
+      # - --focus
+      # - "${CAMERA_FOCUS:-0}"
+      # - --zoom
+      # - "${CAMERA_ZOOM:-0}"
+      # - --pan
+      # - "${CAMERA_PAN:-0}"
+      # - --tilt
+      # - "${CAMERA_TILT:-0}"
+      # - --roll
+      # - "${CAMERA_ROLL:-0}"
+      # - --buffer-size
+      # - "${CAMERA_BUFFER_SIZE:-1}"
 
       # Frame preparation and output format
       - --warmup-frames

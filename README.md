@@ -247,6 +247,12 @@ Optional unified entrypoint arguments:
 - `--exposure` optional manual exposure value
 - `--gain` optional camera gain value
 - `--brightness` optional camera brightness value
+- `--contrast`, `--saturation`, `--hue`, `--gamma`, `--sharpness`, `--backlight` optional image controls
+- `--auto-white-balance` or `--no-auto-white-balance` control automatic white balance
+- `--white-balance-temperature`, `--white-balance-blue`, `--white-balance-red` optional white balance controls
+- `--autofocus` or `--no-autofocus` control automatic focus
+- `--focus`, `--zoom`, `--pan`, `--tilt`, `--roll` optional lens and positioning controls
+- `--buffer-size` optional capture buffer size
 - `--warmup-frames` number of startup frames to discard before saving (default `8`)
 - `--overlay-timestamp` or `--no-overlay-timestamp` draw timestamp onto pixels (default `off`)
 - `--overlay-text` optional custom string shown before overlay timestamp

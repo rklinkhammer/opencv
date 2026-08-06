@@ -89,6 +89,10 @@ materially different value raises `CaptureError`. With `--verbose`, the CLI also
 the pre-configuration properties and every verified update. Native GStreamer reports its
 pipeline in verbose mode because format negotiation happens through pipeline caps.
 
+The portable property set covers frame mode, exposure, image adjustment, white balance,
+focus, pan/tilt/roll/zoom, and buffering. Backend-specific OpenNI, XI, OBSENSOR, mobile,
+and GPhoto properties are intentionally excluded.
+
 Public backend names remain `opencv` and `gstreamer`. GStreamer supports explicit
 pipelines plus `usb-v4l2` and `jetson-csi` presets.
 

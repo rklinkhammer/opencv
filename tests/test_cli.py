@@ -49,6 +49,38 @@ class CliTests(unittest.TestCase):
                 "8",
                 "--brightness",
                 "42",
+                "--contrast",
+                "10",
+                "--saturation",
+                "20",
+                "--hue",
+                "1",
+                "--gamma",
+                "100",
+                "--sharpness",
+                "3",
+                "--backlight",
+                "1",
+                "--no-auto-white-balance",
+                "--white-balance-temperature",
+                "4500",
+                "--white-balance-blue",
+                "2",
+                "--white-balance-red",
+                "3",
+                "--no-autofocus",
+                "--focus",
+                "20",
+                "--zoom",
+                "2",
+                "--pan",
+                "1",
+                "--tilt",
+                "2",
+                "--roll",
+                "3",
+                "--buffer-size",
+                "1",
                 "--warmup-frames",
                 "8",
                 "--overlay-timestamp",
@@ -83,6 +115,23 @@ class CliTests(unittest.TestCase):
         self.assertEqual(-6.0, config.exposure)
         self.assertEqual(8.0, config.gain)
         self.assertEqual(42.0, config.brightness)
+        self.assertEqual(10.0, config.contrast)
+        self.assertEqual(20.0, config.saturation)
+        self.assertEqual(1.0, config.hue)
+        self.assertEqual(100.0, config.gamma)
+        self.assertEqual(3.0, config.sharpness)
+        self.assertEqual(1.0, config.backlight)
+        self.assertFalse(config.auto_white_balance)
+        self.assertEqual(4500.0, config.white_balance_temperature)
+        self.assertEqual(2.0, config.white_balance_blue)
+        self.assertEqual(3.0, config.white_balance_red)
+        self.assertFalse(config.autofocus)
+        self.assertEqual(20.0, config.focus)
+        self.assertEqual(2.0, config.zoom)
+        self.assertEqual(1.0, config.pan)
+        self.assertEqual(2.0, config.tilt)
+        self.assertEqual(3.0, config.roll)
+        self.assertEqual(1, config.buffer_size)
         self.assertEqual(8, config.warmup_frames)
         self.assertTrue(config.overlay_timestamp)
         self.assertEqual("Lab Camera", config.overlay_text)
