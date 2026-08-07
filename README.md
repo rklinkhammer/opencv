@@ -70,8 +70,9 @@ For GPIO capture, pass the GPIO chip as an additional device and provide the
 normal application arguments:
 
 ```bash
-GPIO_DEVICE_GID=$(stat -c '%g' /dev/gpiochip0) \
-  docker compose run --rm --device /dev/gpiochip0 camera-capture \
+docker compose run --rm \
+  --group-add "$(stat -c '%g' /dev/gpiochip0)" \
+  --device /dev/gpiochip0 camera-capture \
   capture-main \
   --camera-output-dir /workspace/captures/images \
   --gpio-output-dir /workspace/captures/gpio \

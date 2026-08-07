@@ -6,9 +6,8 @@ services:
     devices:
       - "${CAMERA_DEVICE:-/dev/video0}:${CAMERA_DEVICE:-/dev/video0}"
     group_add:
-      # Override these with the host devices' numeric group IDs when needed.
+      # Override with the host camera device's numeric group ID when needed.
       - "${CAMERA_DEVICE_GID:-44}"
-      - "${GPIO_DEVICE_GID:-44}"
     volumes:
       - ./captures:/workspace/captures
     command:
