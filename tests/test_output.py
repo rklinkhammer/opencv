@@ -9,8 +9,9 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from threading import Barrier, Lock, Thread
 
-from capture_shared.output import recover_stale_outputs
+from capture_shared.output import recover_stale_outputs, reserve_unique_path
 
 
 class OutputRecoveryTests(unittest.TestCase):
@@ -33,6 +34,38 @@ class OutputRecoveryTests(unittest.TestCase):
             self.assertFalse(temporary.exists())
             self.assertFalse(reservation.exists())
             self.assertTrue(completed.exists())
+
+    def test_concurrent_reservations_never_choose_the_same_path(self):
+        worker_count = 16
+        start = Barrier(worker_count)
+        paths = []
+        errors = []
+        result_lock = Lock()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir)
+
+            def reserve() -> None:
+                start.wait()
+                try:
+                    path = reserve_unique_path(output_dir, "frame", "jpg")
+                    with result_lock:
+                        paths.append(path)
+                except Exception as exc:
+                    with result_lock:
+                        errors.append(exc)
+
+            threads = [Thread(target=reserve) for _ in range(worker_count)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=2)
+
+            self.assertTrue(all(not thread.is_alive() for thread in threads))
+            self.assertEqual([], errors)
+            self.assertEqual(worker_count, len(paths))
+            self.assertEqual(worker_count, len(set(paths)))
+            self.assertTrue(all(path.exists() for path in paths))
 
 
 if __name__ == "__main__":

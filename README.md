@@ -63,11 +63,15 @@ or duration:
 CAMERA_DEVICE=/dev/video1 CAPTURE_DURATION=10 docker compose run --rm camera-capture
 ```
 
+The image runs as a non-root user. On Linux, set `CAMERA_DEVICE_GID` to the
+numeric group ID reported by `stat -c '%g' /dev/video0` when it is not 44.
+
 For GPIO capture, pass the GPIO chip as an additional device and provide the
 normal application arguments:
 
 ```bash
-docker compose run --rm --device /dev/gpiochip0 camera-capture \
+GPIO_DEVICE_GID=$(stat -c '%g' /dev/gpiochip0) \
+  docker compose run --rm --device /dev/gpiochip0 camera-capture \
   capture-main \
   --camera-output-dir /workspace/captures/images \
   --gpio-output-dir /workspace/captures/gpio \
@@ -551,13 +555,21 @@ python scripts/smoke_test_linux_camera.py --camera-index 0 --require-device
 
 ## Run Tests
 
+Install the exact development environment recorded in `uv.lock`:
+
+```bash
+uv sync --frozen --extra dev
+```
+
 Canonical test runner:
 
 ```bash
-.venv/bin/python -m pytest -q --cov --cov-report=term-missing --cov-fail-under=75
+uv run --frozen --extra dev pytest -q --cov --cov-report=term-missing --cov-fail-under=75
 ```
 
-The suite measures branch coverage for `src` and enforces a 75% project minimum.
+The suite measures branch coverage for `src`, enforces a 75% project minimum, and applies
+a 30-second timeout to every test. Hypothesis exercises parser, normalization, timestamp,
+and output-path properties over generated edge cases.
 
 Run the camera-free GStreamer integration test in the Docker image:
 
@@ -569,6 +581,26 @@ docker compose run --rm tests pytest -q -m gstreamer
 It uses `videotestsrc` and a named `appsink`; no `/dev/videoX` device is required. The
 test skips automatically outside environments with PyGObject and the required GStreamer
 plugins.
+
+Validate dependencies and distribution artifacts:
+
+```bash
+uv run --frozen --extra dev pip-audit -r requirements.lock
+uv build
+uv run --frozen --extra dev twine check dist/*
+```
+
+When dependencies change, refresh both committed lock files:
+
+```bash
+uv lock
+uv export --frozen --extra dev --no-emit-project --no-hashes \
+  --output-file requirements.lock
+```
+
+CI verifies that `requirements.lock` matches `uv.lock`, installs the built wheel in a clean
+environment, exercises all three CLI entry points, runs GStreamer in Docker, reviews pull
+request dependencies, and scans the repository and image with Trivy.
 
 Hardware tests are opt-in:
 

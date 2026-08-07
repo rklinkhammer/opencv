@@ -407,3 +407,28 @@ class NativeGStreamerIntegrationTests(unittest.TestCase):
             self.assertEqual(np.uint8, frame.dtype)
         finally:
             capture.release()
+
+    def test_repeated_pipeline_lifecycle(self):
+        pipeline = (
+            "videotestsrc num-buffers=1 ! "
+            "video/x-raw,width=16,height=12,framerate=30/1 ! "
+            "videoconvert ! video/x-raw,format=BGR ! "
+            "appsink name=appsink drop=true sync=false max-buffers=1"
+        )
+
+        for _ in range(5):
+            capture = NativeGStreamerCapture(
+                CaptureConfig(output_dir=Path("."), gstreamer_pipeline=pipeline)
+            )
+            try:
+                ok = False
+                frame = None
+                for _ in range(10):
+                    ok, frame = capture.read()
+                    if ok:
+                        break
+                self.assertTrue(ok)
+                self.assertEqual((12, 16, 3), frame.shape)
+            finally:
+                capture.release()
+            self.assertFalse(capture.isOpened())

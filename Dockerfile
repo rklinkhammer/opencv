@@ -31,15 +31,28 @@ RUN python3 -m venv --system-site-packages "$VIRTUAL_ENV" \
 
 WORKDIR /workspace
 
-COPY pyproject.toml README.md compose.yaml ./
+COPY pyproject.toml README.md compose.yaml requirements.lock ./
 COPY src ./src
 COPY typings ./typings
-RUN pip install --no-cache-dir -e '.[dev]'
+RUN pip install --no-cache-dir -r requirements.lock \
+    && pip install --no-cache-dir --no-deps -e . \
+    && pip uninstall --yes pip setuptools wheel \
+    && apt-get purge -y \
+        build-essential \
+        python3-dev \
+        python3-pip \
+        python3-setuptools \
+        python3-wheel \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY tests ./tests
 COPY scripts ./scripts
 COPY ARCHITECTURE.md ./
 
-RUN mkdir -p /workspace/captures/images /workspace/captures/gpio
+RUN mkdir -p /workspace/captures/images /workspace/captures/gpio \
+    && chown -R ubuntu:ubuntu /workspace
+
+USER ubuntu
 
 CMD ["capture-main", "--help"]
